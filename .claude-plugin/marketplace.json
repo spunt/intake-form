@@ -1,0 +1,14 @@
+{
+  "name": "intake-form",
+  "owner": {
+    "name": "Bob Spunt",
+    "url": "https://github.com/spunt"
+  },
+  "plugins": [
+    {
+      "name": "intake-form",
+      "source": "./",
+      "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export."
+    }
+  ]
+}

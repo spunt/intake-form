@@ -1,0 +1,29 @@
+{
+  "title": "Effort estimation",
+  "heading": "How much effort will this take?",
+  "subhead": "Per-primitive smoke test for the slider question type.",
+  "exportTitle": "EFFORT ESTIMATE",
+
+  "sections": [
+    {
+      "name": "Estimate",
+      "questions": [
+        {
+          "id": "effort",
+          "type": "slider",
+          "label": "Estimated effort to complete this work",
+          "min": 0,
+          "max": 100,
+          "step": 5,
+          "default": 30,
+          "commentary": false,
+          "anchors": [
+            { "at": 0,   "label": "Trivial" },
+            { "at": 50,  "label": "Moderate" },
+            { "at": 100, "label": "Heroic" }
+          ]
+        }
+      ]
+    }
+  ]
+}

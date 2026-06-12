@@ -1,0 +1,26 @@
+{
+  "title": "Scope selector",
+  "heading": "What scope does this apply to?",
+  "subhead": "Per-primitive smoke test for the segmented toggle question type.",
+  "exportTitle": "SCOPE SELECTOR",
+
+  "sections": [
+    {
+      "name": "Scope",
+      "questions": [
+        {
+          "id": "scope",
+          "type": "segmented",
+          "label": "Who is affected by this change?",
+          "commentary": false,
+          "default": "team",
+          "options": [
+            { "value": "self",  "label": "Just me" },
+            { "value": "team",  "label": "My team" },
+            { "value": "org",   "label": "Whole org" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "title": "Book Proposal Review",
+  "heading": "Manuscript evaluation",
+  "subhead": "A structured review for editorial committees. Responses are confidential.",
+  "exportTitle": "EDITORIAL REVIEW",
+  "theme": { "preset": "editorial" },
+
+  "sections": [
+    {
+      "name": "Proposal",
+      "questions": [
+        {
+          "id": "proposal_frame",
+          "type": "narrative-card",
+          "icon": "📖",
+          "title": "Begin with what you know.",
+          "body": "Before scoring, write a single sentence capturing your first impression — the feeling, not the argument."
+        },
+        {
+          "id": "first_impression",
+          "type": "textarea",
+          "label": "First impression",
+          "hint": "One sentence. Capture what the manuscript made you feel.",
+          "required": true
+        },
+        {
+          "id": "merit",
+          "type": "scale",
+          "label": "Overall literary merit",
+          "required": true,
+          "min": 1,
+          "max": 10,
+          "default": 5,
+          "anchors": ["Weak — significant revision needed", "Strong — ready to proceed"]
+        },
+        {
+          "id": "audience",
+          "type": "segmented",
+          "label": "Target audience breadth",
+          "required": true,
+          "options": [
+            { "value": "broad",     "label": "Broad",     "selected": true },
+            { "value": "targeted",  "label": "Targeted" },
+            { "value": "niche",     "label": "Niche" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Decision",
+      "questions": [
+        {
+          "id": "recommendation",
+          "type": "radio",
+          "label": "Editorial recommendation",
+          "required": true,
+          "commentary": false,
+          "options": [
+            { "value": "acquire", "label": "Acquire",                "description": "Proceed to contract discussion" },
+            { "value": "revise",  "label": "Revise and resubmit",   "description": "Request revisions before deciding", "selected": true },
+            { "value": "pass",    "label": "Pass",                  "description": "Decline at this time" }
+          ]
+        },
+        {
+          "id": "notes",
+          "type": "textarea",
+          "label": "Confidential editorial notes",
+          "hint": "Not shared with the author.",
+          "required": false,
+          "commentary": false
+        }
+      ]
+    }
+  ]
+}

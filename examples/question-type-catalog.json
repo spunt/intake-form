@@ -1,0 +1,325 @@
+{
+  "title": "Question Type Catalog",
+  "heading": "Intake-Form Question Types",
+  "subhead": "All primitive types — rendered in the default theme.",
+  "exportTitle": "CATALOG EXPORT",
+  "sections": [
+    {
+      "name": "radio",
+      "questions": [
+        {
+          "id": "radio_demo",
+          "type": "radio",
+          "label": "Which option best describes your situation?",
+          "hint": "Pick the closest match — use commentary to qualify.",
+          "required": true,
+          "inferenceBox": "This is an inferenceBox: what the AI already sees about your situation.",
+          "options": [
+            {
+              "value": "a",
+              "label": "Option A",
+              "description": "A clear first choice with a description.",
+              "selected": true,
+              "badge": "Likely match — based on prior context"
+            },
+            {
+              "value": "b",
+              "label": "Option B",
+              "description": "A second choice with a description."
+            },
+            {
+              "value": "c",
+              "label": "Option C",
+              "description": "A third choice with a description."
+            },
+            {
+              "value": "unsure",
+              "label": "Not sure",
+              "unsure": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "checkbox",
+      "questions": [
+        {
+          "id": "checkbox_demo",
+          "type": "checkbox",
+          "label": "Which constraints apply? (select all that apply)",
+          "hint": "Pick everything that genuinely applies.",
+          "options": [
+            {
+              "value": "time",
+              "label": "Time",
+              "description": "There is an external deadline.",
+              "selected": true
+            },
+            {
+              "value": "money",
+              "label": "Money",
+              "description": "Budget envelope is fixed."
+            },
+            {
+              "value": "people",
+              "label": "People",
+              "description": "Headcount is fixed."
+            },
+            {
+              "value": "compliance",
+              "label": "Compliance",
+              "description": "Legal or policy requirement."
+            },
+            {
+              "value": "none",
+              "label": "None of these",
+              "unsure": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "text",
+      "questions": [
+        {
+          "id": "text_demo",
+          "type": "text",
+          "label": "What is the project name or short identifier?",
+          "hint": "Single-line free text — short identifiers, names, follow-up values.",
+          "placeholder": "e.g., project-alpha or Q3 analytics spike",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "textarea",
+      "questions": [
+        {
+          "id": "textarea_demo",
+          "type": "textarea",
+          "label": "In one sentence, what is the actual question you need answered?",
+          "hint": "Multi-line. Auto-grows. Cap: 2 per form.",
+          "placeholder": "e.g., Should we adopt Postgres for the analytics path?",
+          "required": true,
+          "maxLength": 240
+        }
+      ]
+    },
+    {
+      "name": "scale",
+      "questions": [
+        {
+          "id": "scale_demo",
+          "type": "scale",
+          "label": "How much capital is at risk?",
+          "hint": "Five-button scale. Trade-off anchors, not good/bad.",
+          "anchors": [
+            "Trivial",
+            "Bet-the-company"
+          ],
+          "default": 2
+        }
+      ]
+    },
+    {
+      "name": "slider",
+      "questions": [
+        {
+          "id": "slider_demo",
+          "type": "slider",
+          "label": "Estimated effort for this project",
+          "hint": "Drag the handle. Nearest anchor label is highlighted.",
+          "min": 0,
+          "max": 100,
+          "step": 10,
+          "default": 30,
+          "anchors": [
+            {
+              "at": 0,
+              "label": "Trivial"
+            },
+            {
+              "at": 50,
+              "label": "Moderate"
+            },
+            {
+              "at": 100,
+              "label": "Heroic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "segmented",
+      "questions": [
+        {
+          "id": "segmented_demo",
+          "type": "segmented",
+          "label": "How will this decision be made?",
+          "hint": "Pill-button toggle. 2–5 mutually-exclusive options.",
+          "default": "consulted",
+          "options": [
+            {
+              "value": "solo",
+              "label": "Solo"
+            },
+            {
+              "value": "consulted",
+              "label": "Consulted"
+            },
+            {
+              "value": "consensus",
+              "label": "Consensus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "priority-rank",
+      "questions": [
+        {
+          "id": "priority_rank_demo",
+          "type": "priority-rank",
+          "label": "Order these factors from most to least weight",
+          "hint": "Drag rows or use the ↑↓ buttons. Top position = highest weight.",
+          "options": [
+            {
+              "value": "impact",
+              "label": "Expected impact",
+              "description": "How much does this move the needle?"
+            },
+            {
+              "value": "risk",
+              "label": "Downside risk",
+              "description": "How bad is the worst case?"
+            },
+            {
+              "value": "speed",
+              "label": "Time to execute",
+              "description": "How long before you see results?"
+            },
+            {
+              "value": "reversibility",
+              "label": "Reversibility",
+              "description": "Can you undo it if you're wrong?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "file-upload",
+      "questions": [
+        {
+          "id": "file_upload_demo",
+          "type": "file-upload",
+          "label": "Attach a supporting document (optional)",
+          "hint": "Drag-and-drop or click to browse. Embeds as base64 in the export.",
+          "accept": "image/*,application/pdf,text/plain",
+          "maxSizeKb": 512,
+          "commentary": false
+        }
+      ]
+    },
+    {
+      "name": "narrative-card",
+      "questions": [
+        {
+          "id": "narrative_card_demo",
+          "type": "narrative-card",
+          "icon": "⚖️",
+          "title": "Now for the stakes.",
+          "body": "Understanding what is on the line shapes the recommendation you will get back. The next questions help calibrate how to weight competing concerns."
+        }
+      ]
+    },
+    {
+      "name": "embedded-media",
+      "questions": [
+        {
+          "id": "embedded_media_demo",
+          "type": "embedded-media",
+          "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Chart_line_2020_Q1.svg/320px-Chart_line_2020_Q1.svg.png",
+          "alt": "Example line chart showing Q1 2020 data",
+          "caption": "Example embedded image — reference artifact for the decision."
+        }
+      ]
+    },
+    {
+      "name": "multi-branch",
+      "questions": [
+        {
+          "id": "multi_branch_demo",
+          "type": "radio",
+          "label": "What format do you need for the output?",
+          "hint": "Selecting an option reveals a follow-up question specific to that choice.",
+          "required": true,
+          "options": [
+            {
+              "value": "report",
+              "label": "Report",
+              "description": "A written document with findings and recommendations.",
+              "branch": {
+                "id": "report_pages",
+                "type": "slider",
+                "label": "How many pages should the report be?",
+                "min": 1,
+                "max": 50,
+                "default": 10
+              }
+            },
+            {
+              "value": "dashboard",
+              "label": "Dashboard",
+              "description": "An interactive visualization of the data.",
+              "branch": {
+                "id": "dashboard_refresh",
+                "type": "segmented",
+                "label": "Refresh cadence",
+                "options": [
+                  {
+                    "value": "live",
+                    "label": "Live"
+                  },
+                  {
+                    "value": "daily",
+                    "label": "Daily"
+                  },
+                  {
+                    "value": "weekly",
+                    "label": "Weekly"
+                  }
+                ]
+              }
+            },
+            {
+              "value": "slides",
+              "label": "Slides",
+              "description": "A presentation deck.",
+              "branch": {
+                "id": "slides_audience",
+                "type": "text",
+                "label": "Who is the primary audience?",
+                "placeholder": "e.g., exec team, engineering leads"
+              }
+            },
+            {
+              "value": "unsure",
+              "label": "Not sure yet",
+              "unsure": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "knownContext": [],
+  "routing": {},
+  "theme": {
+    "preset": "default"
+  }
+}

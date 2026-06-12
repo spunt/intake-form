@@ -1,0 +1,25 @@
+{
+  "title": "Priority ranking",
+  "heading": "What comes first?",
+  "subhead": "Drag rows or use the ↑↓ buttons to order these from most to least important.",
+  "sections": [
+    {
+      "name": "Priorities",
+      "questions": [
+        {
+          "id": "priorities",
+          "type": "priority-rank",
+          "label": "Order these from most to least important",
+          "hint": "Your first choice shapes everything else.",
+          "required": true,
+          "options": [
+            { "value": "accuracy",       "label": "Accuracy",       "description": "Results must be correct, even if slower." },
+            { "value": "speed",          "label": "Speed",          "description": "Time-to-answer matters above all." },
+            { "value": "cost",           "label": "Cost",           "description": "Keep compute and API spend low." },
+            { "value": "explainability", "label": "Explainability", "description": "Users need to understand the reasoning." }
+          ]
+        }
+      ]
+    }
+  ]
+}

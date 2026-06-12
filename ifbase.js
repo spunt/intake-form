@@ -1,0 +1,1514 @@
+/* intake-form runtime — single-source-of-truth renderer
+ *
+ * The form HTML contains a single <script id="form-spec" type="application/json"> block.
+ * On DOMContentLoaded this file:
+ *   1. Reads the spec
+ *   2. Builds BOTH the wizard layout and the grouped layout from it
+ *   3. Wires native <input> form controls and syncs state across layouts
+ *
+ * Agents authoring forms only edit the spec block — never the layout HTML.
+ */
+
+(function () {
+  'use strict';
+
+  // ── Module state ──
+  var state = {};
+  var checkboxSets = {};
+  var currentQ = 1;
+  var TOTAL_Q = 1;
+  var SECTION_NAMES = ['Review'];
+  var SPEC = null;
+
+  // Expose for inline handlers in template + custom export functions.
+  window.state = state;
+  window.checkboxSets = checkboxSets;
+
+  // ── Entry point ──
+  document.addEventListener('DOMContentLoaded', function () {
+    var specEl = document.getElementById('form-spec');
+    if (!specEl) {
+      console.error('intake-form: <script id="form-spec"> not found');
+      return;
+    }
+    try {
+      SPEC = JSON.parse(specEl.textContent);
+    } catch (e) {
+      console.error('intake-form: spec JSON parse error', e);
+      return;
+    }
+    applyTheme(SPEC);
+    renderForm(SPEC);
+    setLayout('wizard');
+    updateProgress();
+  });
+
+  // ── Theme application ──
+  // themeToCSSProps is a pure function: spec.theme -> { props, dataset, warns }.
+  // applyTheme wires it onto <html> + emits warnings via console.warn.
+  // Pure split exists so the verification harness can test theme translation
+  // without driving a real DOM.
+  var PALETTE_MAP = {
+    accent:           '--if-color-accent',
+    'accent-hover':   '--if-color-accent-hover',
+    'accent-soft':    '--if-color-accent-soft',
+    'accent-soft2':   '--if-color-accent-soft2',
+    bg:               '--if-color-bg',
+    surface:          '--if-color-surface',
+    'surface-soft':   '--if-color-surface-soft',
+    border:           '--if-color-border',
+    'border-strong':  '--if-color-border-strong',
+    text:             '--if-color-text',
+    'text-muted':     '--if-color-text-muted',
+    'text-dim':       '--if-color-text-dim',
+    success:          '--if-color-success',
+    warning:          '--if-color-warning',
+    danger:           '--if-color-danger'
+  };
+  var FONT_MAP = {
+    sans:  'var(--if-font-sans)',
+    serif: 'var(--if-font-serif)',
+    mono:  'var(--if-font-mono)'
+  };
+  var MOTION_PRESETS = {
+    off:        { fast: '1ms',   base: '1ms',   slow: '1ms' },
+    subtle:     { fast: '80ms',  base: '120ms', slow: '180ms' },
+    default:    { fast: '120ms', base: '180ms', slow: '280ms' },
+    expressive: { fast: '180ms', base: '260ms', slow: '420ms' }
+  };
+  var CURVE_MAP = {
+    quart: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    quint: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    expo:  'cubic-bezier(0.16, 1, 0.3, 1)'
+  };
+  var DENSITY_MAP = { compact: 0.85, default: 1, airy: 1.15 };
+
+  function themeToCSSProps(theme) {
+    var props = {};
+    var dataset = {};
+    var warns = [];
+    if (!theme || typeof theme !== 'object') return { props: props, dataset: dataset, warns: warns };
+
+    if (theme.preset) dataset.theme = String(theme.preset);
+
+    if (theme.hue != null) {
+      var hue = Number(theme.hue);
+      if (isFinite(hue)) props['--if-hue'] = String(((hue % 360) + 360) % 360);
+      else warns.push('theme.hue: not a finite number (got ' + JSON.stringify(theme.hue) + ')');
+    }
+
+    if (theme.palette && typeof theme.palette === 'object') {
+      Object.keys(theme.palette).forEach(function (k) {
+        var tok = PALETTE_MAP[k];
+        var v = theme.palette[k];
+        if (!tok) warns.push('theme.palette: unknown key "' + k + '" (valid keys: ' + Object.keys(PALETTE_MAP).join(', ') + ')');
+        else if (typeof v !== 'string') warns.push('theme.palette.' + k + ': not a string');
+        else props[tok] = v;
+      });
+    }
+
+    if (theme.typography && typeof theme.typography === 'object') {
+      var ty = theme.typography;
+      if (ty.display != null) {
+        if (FONT_MAP[ty.display]) props['--if-font-display'] = FONT_MAP[ty.display];
+        else warns.push('theme.typography.display: unknown value "' + ty.display + '" (valid: sans, serif, mono)');
+      }
+      if (ty.body != null) {
+        if (FONT_MAP[ty.body]) {
+          props['--if-font-body'] = FONT_MAP[ty.body];
+          props['--if-font-sans'] = FONT_MAP[ty.body];
+        } else warns.push('theme.typography.body: unknown value "' + ty.body + '" (valid: sans, serif, mono)');
+      }
+      if (ty.scale != null) {
+        if (typeof ty.scale === 'number' && isFinite(ty.scale)) {
+          var s = Math.max(0.85, Math.min(1.3, ty.scale));
+          if (s !== ty.scale) warns.push('theme.typography.scale: clamped from ' + ty.scale + ' to ' + s);
+          props['--if-type-scale'] = String(s);
+        } else warns.push('theme.typography.scale: not a finite number (got ' + JSON.stringify(ty.scale) + ')');
+      }
+    }
+
+    if (theme.motion && typeof theme.motion === 'object') {
+      if (theme.motion.intensity != null) {
+        var m = MOTION_PRESETS[theme.motion.intensity];
+        if (m) {
+          props['--if-duration-fast'] = m.fast;
+          props['--if-duration-base'] = m.base;
+          props['--if-duration-slow'] = m.slow;
+        } else warns.push('theme.motion.intensity: unknown value "' + theme.motion.intensity + '" (valid: off, subtle, default, expressive)');
+      }
+      if (theme.motion.curve != null) {
+        if (CURVE_MAP[theme.motion.curve]) props['--if-ease-out-primary'] = CURVE_MAP[theme.motion.curve];
+        else warns.push('theme.motion.curve: unknown value "' + theme.motion.curve + '" (valid: quart, quint, expo)');
+      }
+    }
+
+    if (theme.density != null) {
+      var d = typeof theme.density === 'number' ? theme.density : DENSITY_MAP[theme.density];
+      if (typeof d === 'number' && isFinite(d)) {
+        var clamped = Math.max(0.7, Math.min(1.4, d));
+        if (clamped !== d) warns.push('theme.density: clamped from ' + d + ' to ' + clamped);
+        props['--if-density'] = String(clamped);
+      } else warns.push('theme.density: unrecognized value ' + JSON.stringify(theme.density) + ' (valid: compact, default, airy, or 0.7–1.4 number)');
+    }
+
+    if (theme.voice) dataset.voice = String(theme.voice);
+
+    return { props: props, dataset: dataset, warns: warns };
+  }
+
+  function applyTheme(spec) {
+    if (!spec || !spec.theme) return;
+    var result = themeToCSSProps(spec.theme);
+    var root = document.documentElement;
+    Object.keys(result.props).forEach(function (k) { root.style.setProperty(k, result.props[k]); });
+    Object.keys(result.dataset).forEach(function (k) { root.dataset[k] = result.dataset[k]; });
+    result.warns.forEach(function (w) { console.warn('intake-form theme:', w); });
+  }
+
+  // ── Theme switcher ──
+  var THEME_PRESETS = [
+    { value: 'default',   label: 'Default' },
+    { value: 'editorial', label: 'Editorial' },
+    { value: 'terminal',  label: 'Terminal' }
+  ];
+
+  function buildThemeMenu() {
+    var wrap = document.createElement('div');
+    wrap.className = 'theme-menu-wrap';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'theme-menu-btn';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Switch theme');
+    btn.innerHTML = '<span class="theme-menu-icon" aria-hidden="true"></span>Theme';
+    wrap.appendChild(btn);
+
+    var dropdown = document.createElement('div');
+    dropdown.className = 'theme-menu-dropdown';
+    dropdown.setAttribute('role', 'menu');
+
+    THEME_PRESETS.forEach(function (preset) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'theme-menu-item';
+      item.setAttribute('role', 'menuitem');
+      item.dataset.preset = preset.value;
+      var dot = document.createElement('span');
+      dot.className = 'theme-menu-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      item.appendChild(dot);
+      item.appendChild(document.createTextNode(preset.label));
+      item.addEventListener('click', function () {
+        switchPreset(preset.value);
+        closeMenu();
+      });
+      dropdown.appendChild(item);
+    });
+    wrap.appendChild(dropdown);
+
+    function openMenu() {
+      wrap.classList.add('open');
+      btn.setAttribute('aria-expanded', 'true');
+      var current = document.documentElement.dataset.theme || 'default';
+      dropdown.querySelectorAll('.theme-menu-item').forEach(function (el) {
+        el.classList.toggle('active', el.dataset.preset === current);
+      });
+    }
+    function closeMenu() {
+      wrap.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      wrap.classList.contains('open') ? closeMenu() : openMenu();
+    });
+    dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+
+    return wrap;
+  }
+
+  function switchPreset(preset) {
+    var root = document.documentElement;
+    if (!preset || preset === 'default') delete root.dataset.theme;
+    else root.dataset.theme = preset;
+  }
+
+  // ── Top-level renderer ──
+  function renderForm(spec) {
+    document.getElementById('title-slot').textContent = spec.title || 'Intake';
+    document.getElementById('topbar-title-slot').textContent = spec.title || '';
+    document.getElementById('heading-slot').textContent = spec.heading || '';
+    document.getElementById('subhead-slot').textContent = spec.subhead || '';
+
+    // Inject theme switcher into topbar
+    var topbar = document.querySelector('.topbar');
+    var toggle = document.getElementById('layout-toggle');
+    if (topbar && toggle) {
+      var actions = document.createElement('div');
+      actions.className = 'topbar-actions';
+      topbar.insertBefore(actions, toggle);
+      actions.appendChild(toggle);
+      actions.appendChild(buildThemeMenu());
+    }
+
+    var wizard = document.getElementById('layout-wizard');
+    var grouped = document.getElementById('layout-grouped');
+
+    // Flatten questions to wizard steps
+    var steps = [];
+    spec.sections.forEach(function (sec, sIdx) {
+      sec.questions.forEach(function (q) {
+        steps.push({ section: sec, sectionIdx: sIdx, question: q });
+      });
+    });
+
+    TOTAL_Q = steps.length + 1; // +1 for review step
+    SECTION_NAMES = steps.map(function (s) { return s.section.name; }).concat(['Review']);
+
+    // Initialize state from spec defaults
+    spec.sections.forEach(function (sec) {
+      sec.questions.forEach(initStateFromQuestion);
+    });
+
+    // ── Build wizard layout ──
+    steps.forEach(function (step, idx) {
+      var stepNum = idx + 1;
+      var isFirst = idx === 0;
+      var stepEl = document.createElement('div');
+      stepEl.className = 'wizard-question' + (isFirst ? ' active' : '');
+      stepEl.id = 'q' + stepNum;
+
+      stepEl.appendChild(buildSectionLabel(step.section.name));
+      if (step.question.inferenceBox) {
+        stepEl.appendChild(buildInferenceBox(step.question.inferenceBox));
+      }
+      stepEl.appendChild(buildQuestion(step.question, 'w'));
+      stepEl.appendChild(buildNavRow(!isFirst, true, false));
+      wizard.appendChild(stepEl);
+    });
+
+    // Wizard review step
+    var reviewStep = document.createElement('div');
+    reviewStep.className = 'wizard-question';
+    reviewStep.id = 'q' + TOTAL_Q;
+    reviewStep.appendChild(buildSectionLabel('Review'));
+    var reviewContent = document.createElement('div');
+    reviewContent.id = 'wizard-review-content';
+    reviewStep.appendChild(reviewContent);
+    reviewStep.appendChild(buildHr());
+    reviewStep.appendChild(buildExportBox('export-text', 'copy-fb-w'));
+    reviewStep.appendChild(buildNavRow(true, false, true));
+    wizard.appendChild(reviewStep);
+
+    // ── Build grouped layout (only if multiple sections) ──
+    if (spec.sections.length > 1) {
+      document.getElementById('layout-toggle').hidden = false;
+      var tabs = document.createElement('div');
+      tabs.className = 'section-tabs';
+      spec.sections.forEach(function (sec, sIdx) {
+        var tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'section-tab' + (sIdx === 0 ? ' active' : '');
+        tab.textContent = sec.name;
+        tab.onclick = function () { groupedNav(sIdx, tab); };
+        tabs.appendChild(tab);
+      });
+      var exportTab = document.createElement('button');
+      exportTab.type = 'button';
+      exportTab.className = 'section-tab';
+      exportTab.textContent = 'Export';
+      exportTab.onclick = function () { groupedNav(spec.sections.length, exportTab); };
+      tabs.appendChild(exportTab);
+      grouped.appendChild(tabs);
+
+      spec.sections.forEach(function (sec, sIdx) {
+        var secEl = document.createElement('div');
+        secEl.className = 'grouped-section' + (sIdx === 0 ? ' active' : '');
+        secEl.id = 'gs' + sIdx;
+        sec.questions.forEach(function (q) {
+          if (q.inferenceBox) secEl.appendChild(buildInferenceBox(q.inferenceBox));
+          secEl.appendChild(buildQuestion(q, 'g'));
+        });
+        grouped.appendChild(secEl);
+      });
+
+      var exportSec = document.createElement('div');
+      exportSec.className = 'grouped-section';
+      exportSec.id = 'gs' + spec.sections.length;
+      var groupedReview = document.createElement('div');
+      groupedReview.id = 'grouped-review-content';
+      exportSec.appendChild(groupedReview);
+      exportSec.appendChild(buildHr());
+      exportSec.appendChild(buildExportBox('export-text-grouped', 'copy-fb-g'));
+      grouped.appendChild(exportSec);
+    } else {
+      document.getElementById('layout-toggle').hidden = true;
+      // Single-section forms: also render the export inline at end of wizard review (already done above)
+    }
+  }
+
+  // ── Question builder ──
+  function buildQuestion(q, layoutPrefix) {
+    var wrap = document.createElement('div');
+    wrap.className = 'question';
+    wrap.dataset.questionId = q.id;
+    wrap.dataset.layout = layoutPrefix;
+
+    var isDisplay = q.type === 'narrative-card' || q.type === 'embedded-media';
+    if (q.label && !isDisplay) {
+      var lblWrap = document.createElement('div');
+      lblWrap.className = 'question-label';
+      var lbl = document.createElement('label');
+      if (q.required) lbl.className = 'req';
+      lbl.textContent = q.label;
+      // Associate label with single-input types so axe can find the programmatic relationship
+      if (q.type === 'textarea' || q.type === 'text') {
+        lbl.htmlFor = 'if-input-' + layoutPrefix + '-' + q.id;
+      }
+      lblWrap.appendChild(lbl);
+      wrap.appendChild(lblWrap);
+    }
+    if (q.hint && !isDisplay) {
+      var hint = document.createElement('div');
+      hint.className = 'question-hint';
+      hint.textContent = q.hint;
+      wrap.appendChild(hint);
+    }
+
+    var body;
+    switch (q.type) {
+      case 'radio':    body = buildRadioGroup(q, layoutPrefix); break;
+      case 'checkbox': body = buildCheckboxGroup(q, layoutPrefix); break;
+      case 'textarea': body = buildTextarea(q, layoutPrefix); break;
+      case 'text':     body = buildTextInput(q, layoutPrefix); break;
+      case 'scale':         body = buildScale(q, layoutPrefix); break;
+      case 'slider':        body = buildSlider(q, layoutPrefix); break;
+      case 'segmented':     body = buildSegmented(q, layoutPrefix); break;
+      case 'file-upload':   body = buildFileUpload(q, layoutPrefix); break;
+      case 'narrative-card':   body = buildNarrativeCard(q); break;
+      case 'embedded-media':   body = buildEmbeddedMedia(q); break;
+      case 'priority-rank': body = buildPriorityRank(q, layoutPrefix); break;
+      default:
+        body = document.createElement('div');
+        body.textContent = '[unknown question type: ' + q.type + ']';
+    }
+    wrap.appendChild(body);
+
+    if (q.conditional) {
+      var cond = document.createElement('div');
+      cond.className = 'conditional';
+      cond.id = layoutPrefix + '-' + q.conditional.id;
+      cond.dataset.condFor = q.conditional.id;
+      var condInput = q.conditional.type === 'textarea'
+        ? buildTextarea({
+            id: q.conditional.stateKey || (q.id + '_other'),
+            placeholder: q.conditional.placeholder,
+            maxLength: q.conditional.maxLength
+          }, layoutPrefix)
+        : buildTextInput({
+            id: q.conditional.stateKey || (q.id + '_other'),
+            placeholder: q.conditional.placeholder
+          }, layoutPrefix);
+      cond.appendChild(condInput);
+
+      // Reveal default state if a "reveals" option is currently selected
+      var sel = (q.options || []).find(function (o) { return o.selected; });
+      if (sel && sel.reveals) cond.classList.add('visible');
+
+      wrap.appendChild(cond);
+    }
+
+    if (shouldAddCommentary(q)) {
+      wrap.appendChild(buildCommentary(q, layoutPrefix));
+    }
+    return wrap;
+  }
+
+  // ── Commentary (auto-attached to non-open-ended questions) ──
+  function shouldAddCommentary(q) {
+    if (q.type === 'text' || q.type === 'textarea' || q.type === 'narrative-card' || q.type === 'embedded-media') return false;
+    if (q.commentary === false) return false;
+    if (SPEC && SPEC.commentary === false && q.commentary !== true) return false;
+    return true;
+  }
+
+  function buildCommentary(q, layoutPrefix) {
+    var ckey = q.id + '_commentary';
+    var wrap = document.createElement('div');
+    wrap.className = 'commentary';
+
+    var ta = document.createElement('textarea');
+    ta.className = 'commentary-input';
+    ta.rows = 1;
+    ta.placeholder = q.commentaryPlaceholder || (SPEC && SPEC.commentaryPlaceholder) || 'Add commentary (optional)';
+    ta.maxLength = q.commentaryMaxLength || (SPEC && SPEC.commentaryMaxLength) || 500;
+    ta.dataset.qid = ckey;
+    ta.dataset.layout = layoutPrefix || '';
+    ta.value = state[ckey] || '';
+    autoGrow(ta);
+    ta.addEventListener('input', function () {
+      state[ckey] = ta.value;
+      document.querySelectorAll('textarea[data-qid="' + ckey + '"]').forEach(function (t) {
+        if (t !== ta) {
+          t.value = ta.value;
+          autoGrow(t);
+        }
+      });
+      autoGrow(ta);
+    });
+    wrap.appendChild(ta);
+    return wrap;
+  }
+
+  function autoGrow(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = (ta.scrollHeight ? ta.scrollHeight : 28) + 'px';
+  }
+
+  function buildRadioGroup(q, layoutPrefix) {
+    var opts = q.options || [];
+    var hasBranches = opts.some(function (o) { return o.branch; });
+    var group = document.createElement('div');
+    group.className = 'radio-group';
+    group.setAttribute('role', 'radiogroup');
+
+    opts.forEach(function (opt) {
+      var item = document.createElement('label');
+      item.className = 'choice-item' + (opt.unsure ? ' unsure' : '');
+
+      var input = document.createElement('input');
+      input.type = 'radio';
+      input.name = layoutPrefix + '-' + q.id;
+      input.value = opt.value;
+      input.checked = state[q.id] != null ? state[q.id] === opt.value : !!opt.selected;
+      input.dataset.qid = q.id;
+      input.addEventListener('change', function () {
+        if (!input.checked) return;
+        state[q.id] = input.value;
+        document.querySelectorAll('input[type="radio"][data-qid="' + q.id + '"]').forEach(function (r) {
+          r.checked = (r.value === input.value);
+        });
+        if (q.conditional) {
+          var matchOpt = opts.find(function (o) { return o.value === input.value; });
+          var show = !!(matchOpt && matchOpt.reveals);
+          document.querySelectorAll('[data-cond-for="' + q.conditional.id + '"]').forEach(function (c) {
+            c.classList.toggle('visible', show);
+          });
+        }
+        if (hasBranches) {
+          document.querySelectorAll('.branch-conditional[data-branch-for^="' + q.id + '__"]').forEach(function (bc) {
+            bc.classList.toggle('visible', bc.dataset.branchFor === q.id + '__' + input.value);
+          });
+        }
+      });
+      item.appendChild(input);
+
+      var dot = document.createElement('span');
+      dot.className = 'choice-dot';
+      item.appendChild(dot);
+
+      item.appendChild(buildChoiceText(opt));
+      group.appendChild(item);
+    });
+
+    if (!hasBranches) return group;
+
+    var wrap = document.createElement('div');
+    wrap.appendChild(group);
+    opts.forEach(function (opt) {
+      if (!opt.branch) return;
+      initStateFromQuestion(opt.branch);
+      var bc = document.createElement('div');
+      bc.className = 'branch-conditional';
+      bc.dataset.branchFor = q.id + '__' + opt.value;
+      if (state[q.id] === opt.value) bc.classList.add('visible');
+      bc.appendChild(buildQuestion(opt.branch, layoutPrefix));
+      wrap.appendChild(bc);
+    });
+    return wrap;
+  }
+
+  function buildCheckboxGroup(q, layoutPrefix) {
+    var group = document.createElement('div');
+    group.className = 'checkbox-group';
+    q.options.forEach(function (opt) {
+      var item = document.createElement('label');
+      item.className = 'choice-item' + (opt.unsure ? ' unsure' : '');
+
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.name = layoutPrefix + '-' + q.id;
+      input.value = opt.value;
+      input.checked = !!opt.selected;
+      input.dataset.qid = q.id;
+      input.addEventListener('change', function () {
+        // Sync the matching value across layouts
+        document.querySelectorAll('input[type="checkbox"][data-qid="' + q.id + '"][value="' + input.value + '"]').forEach(function (c) {
+          c.checked = input.checked;
+        });
+        // Recompute set from any one layout
+        var set = new Set();
+        document.querySelectorAll('input[type="checkbox"][data-qid="' + q.id + '"][name="w-' + q.id + '"]:checked').forEach(function (c) {
+          set.add(c.value);
+        });
+        // If wizard layout absent (single section), fall back to grouped
+        if (!set.size) {
+          document.querySelectorAll('input[type="checkbox"][data-qid="' + q.id + '"]:checked').forEach(function (c) {
+            set.add(c.value);
+          });
+        }
+        checkboxSets[q.id] = set;
+        state[q.id] = Array.from(set);
+      });
+      item.appendChild(input);
+
+      var check = document.createElement('span');
+      check.className = 'choice-check';
+      item.appendChild(check);
+
+      item.appendChild(buildChoiceText(opt));
+      group.appendChild(item);
+    });
+    return group;
+  }
+
+  function buildChoiceText(opt) {
+    var text = document.createElement('div');
+    text.className = 'choice-text';
+    var strong = document.createElement('strong');
+    strong.textContent = opt.label;
+    text.appendChild(strong);
+    if (opt.description) {
+      var span = document.createElement('span');
+      span.textContent = opt.description;
+      text.appendChild(span);
+    }
+    if (opt.badge) {
+      var badge = document.createElement('div');
+      badge.className = 'badge-inferred';
+      badge.textContent = opt.badge;
+      text.appendChild(badge);
+    }
+    return text;
+  }
+
+  function buildTextarea(q, layoutPrefix) {
+    var wrap = document.createElement('div');
+    var ta = document.createElement('textarea');
+    if (q.maxLength) ta.maxLength = q.maxLength;
+    ta.id = 'if-input-' + layoutPrefix + '-' + q.id;
+    ta.placeholder = q.placeholder || '';
+    ta.dataset.qid = q.id;
+    ta.dataset.layout = layoutPrefix || '';
+    ta.value = state[q.id] || '';
+    var counter = null;
+    if (q.maxLength) {
+      counter = document.createElement('div');
+      counter.className = 'char-counter';
+      counter.textContent = (ta.value.length) + ' / ' + q.maxLength;
+    }
+    ta.addEventListener('input', function () {
+      state[q.id] = ta.value;
+      // Sync sibling textareas
+      document.querySelectorAll('textarea[data-qid="' + q.id + '"]').forEach(function (t) {
+        if (t !== ta) t.value = ta.value;
+      });
+      if (counter) {
+        var n = ta.value.length;
+        counter.textContent = n + ' / ' + q.maxLength;
+        counter.className = 'char-counter' + (n > q.maxLength * 0.85 ? ' near' : '');
+      }
+    });
+    wrap.appendChild(ta);
+    if (counter) wrap.appendChild(counter);
+    return wrap;
+  }
+
+  function buildTextInput(q, layoutPrefix) {
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.id = 'if-input-' + layoutPrefix + '-' + q.id;
+    inp.placeholder = q.placeholder || '';
+    inp.dataset.qid = q.id;
+    inp.dataset.layout = layoutPrefix || '';
+    inp.value = state[q.id] || '';
+    inp.addEventListener('input', function () {
+      state[q.id] = inp.value;
+      document.querySelectorAll('input[type="text"][data-qid="' + q.id + '"]').forEach(function (t) {
+        if (t !== inp) t.value = inp.value;
+      });
+    });
+    return inp;
+  }
+
+  function buildScale(q, layoutPrefix) {
+    var wrap = document.createElement('div');
+    var row = document.createElement('div');
+    row.className = 'scale-row';
+    for (var i = 1; i <= 5; i++) {
+      (function (n) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'scale-btn' + (state[q.id] === n ? ' active' : '');
+        btn.textContent = n;
+        btn.dataset.qid = q.id;
+        btn.dataset.scaleVal = n;
+        btn.addEventListener('click', function () {
+          state[q.id] = n;
+          document.querySelectorAll('.scale-btn[data-qid="' + q.id + '"]').forEach(function (b) {
+            b.classList.toggle('active', parseInt(b.dataset.scaleVal, 10) === n);
+          });
+        });
+        row.appendChild(btn);
+      })(i);
+    }
+    wrap.appendChild(row);
+    if (q.anchors && q.anchors.length === 2) {
+      var labels = document.createElement('div');
+      labels.className = 'scale-labels';
+      var left = document.createElement('span'); left.textContent = q.anchors[0];
+      var right = document.createElement('span'); right.textContent = q.anchors[1];
+      labels.appendChild(left); labels.appendChild(right);
+      wrap.appendChild(labels);
+    }
+    return wrap;
+  }
+
+  // ── Narrative Card ──
+  function buildNarrativeCard(q) {
+    var card = document.createElement('div');
+    card.className = 'narrative-card';
+    card.setAttribute('aria-label', q.title || 'Note');
+    if (q.icon) {
+      var icon = document.createElement('div');
+      icon.className = 'narrative-card-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = q.icon;
+      card.appendChild(icon);
+    }
+    if (q.title) {
+      var title = document.createElement('div');
+      title.className = 'narrative-card-title';
+      title.textContent = q.title;
+      card.appendChild(title);
+    }
+    if (q.body) {
+      var body = document.createElement('div');
+      body.className = 'narrative-card-body';
+      body.textContent = q.body;
+      card.appendChild(body);
+    }
+    return card;
+  }
+
+  // ── Embedded Media ──
+  function buildEmbeddedMedia(q) {
+    var fig = document.createElement('figure');
+    fig.className = 'embedded-media';
+    var src = q.src || '';
+    var isVideo = q.mediaType === 'video' || /\.(mp4|webm|ogg)(\?|$)/i.test(src);
+    if (src) {
+      if (isVideo) {
+        var vid = document.createElement('video');
+        vid.className = 'embedded-media-asset';
+        vid.src = src;
+        vid.controls = true;
+        vid.setAttribute('aria-label', q.alt || q.caption || 'Video');
+        fig.appendChild(vid);
+      } else {
+        var img = document.createElement('img');
+        img.className = 'embedded-media-asset';
+        img.src = src;
+        img.alt = q.alt || '';
+        img.addEventListener('error', function () {
+          img.style.display = 'none';
+          var ph = document.createElement('div');
+          ph.className = 'embedded-media-placeholder';
+          ph.textContent = 'Media unavailable';
+          fig.insertBefore(ph, img.nextSibling);
+        });
+        fig.appendChild(img);
+      }
+    }
+    if (q.caption) {
+      var cap = document.createElement('figcaption');
+      cap.className = 'embedded-media-caption';
+      cap.textContent = q.caption;
+      fig.appendChild(cap);
+    }
+    return fig;
+  }
+
+  // ── File Upload ──
+  function buildFileUpload(q, layoutPrefix) {
+    var maxKb = q.maxSizeKb != null ? Number(q.maxSizeKb) : 2048;
+    var wrap = document.createElement('div');
+
+    var hiddenInput = document.createElement('input');
+    hiddenInput.type = 'file';
+    hiddenInput.accept = q.accept || '';
+    hiddenInput.style.display = 'none';
+    hiddenInput.dataset.qid = q.id;
+    hiddenInput.dataset.layout = layoutPrefix || '';
+
+    var zone = document.createElement('div');
+    zone.className = 'file-upload-zone';
+    zone.setAttribute('role', 'button');
+    zone.setAttribute('tabindex', '0');
+    zone.setAttribute('aria-label', (q.label || 'Upload file') + '. Drop a file here or press Enter to browse.');
+
+    var icon = document.createElement('div');
+    icon.className = 'file-upload-icon';
+    icon.setAttribute('aria-hidden', 'true');
+
+    var prompt = document.createElement('p');
+    prompt.className = 'file-upload-prompt';
+    prompt.innerHTML = 'Drop a file here or <strong>click to browse</strong>';
+
+    var limit = document.createElement('p');
+    limit.className = 'file-upload-limit';
+    limit.textContent = 'Max ' + (maxKb >= 1024 ? (maxKb / 1024).toFixed(0) + ' MB' : maxKb + ' KB');
+    if (q.accept) limit.textContent += ' · ' + q.accept;
+
+    zone.appendChild(icon);
+    zone.appendChild(prompt);
+    zone.appendChild(limit);
+
+    var preview = document.createElement('div');
+    preview.className = 'file-upload-preview';
+
+    var filename = document.createElement('span');
+    filename.className = 'file-upload-filename';
+
+    var size = document.createElement('span');
+    size.className = 'file-upload-size';
+
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'file-upload-clear';
+    clearBtn.setAttribute('aria-label', 'Remove file');
+    clearBtn.textContent = '✕';
+
+    preview.appendChild(filename);
+    preview.appendChild(size);
+    preview.appendChild(clearBtn);
+
+    var errorEl = document.createElement('div');
+    errorEl.className = 'file-upload-error';
+    errorEl.setAttribute('role', 'alert');
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function syncFileDisplay(dataUrl, fname, fsize) {
+      document.querySelectorAll('[data-file-qid="' + q.id + '"]').forEach(function (p) {
+        var fn = p.querySelector('.file-upload-filename');
+        var fs = p.querySelector('.file-upload-size');
+        if (fn) fn.textContent = fname || '';
+        if (fs) fs.textContent = fsize || '';
+        p.classList.toggle('has-file', !!dataUrl);
+      });
+    }
+
+    function applyFile(file) {
+      errorEl.textContent = '';
+      if (file.size > maxKb * 1024) {
+        errorEl.textContent = 'File too large (' + formatBytes(file.size) + '). Max is ' + (maxKb >= 1024 ? (maxKb / 1024).toFixed(0) + ' MB' : maxKb + ' KB') + '.';
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var dataUrl = reader.result;
+        var meta = '[' + file.name + ' | ' + file.type + ' | ' + formatBytes(file.size) + ']';
+        state[q.id] = meta + '\n' + dataUrl;
+        syncFileDisplay(dataUrl, file.name, formatBytes(file.size));
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearFile() {
+      state[q.id] = '';
+      hiddenInput.value = '';
+      syncFileDisplay('', '', '');
+      errorEl.textContent = '';
+    }
+
+    zone.addEventListener('click', function () { hiddenInput.click(); });
+    zone.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hiddenInput.click(); }
+    });
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drag-active'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('drag-active'); });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault(); zone.classList.remove('drag-active');
+      if (e.dataTransfer.files.length) applyFile(e.dataTransfer.files[0]);
+    });
+
+    hiddenInput.addEventListener('change', function () {
+      if (hiddenInput.files.length) applyFile(hiddenInput.files[0]);
+    });
+
+    clearBtn.addEventListener('click', function (e) { e.stopPropagation(); clearFile(); });
+
+    preview.setAttribute('data-file-qid', q.id);
+
+    // Restore state if already set (grouped view rebuild)
+    if (state[q.id]) {
+      var parts = state[q.id].split('\n');
+      var metaMatch = parts[0] ? parts[0].match(/^\[(.+) \| .+ \| (.+)\]$/) : null;
+      if (metaMatch) {
+        syncFileDisplay(parts[1], metaMatch[1], metaMatch[2]);
+      }
+    }
+
+    wrap.appendChild(hiddenInput);
+    wrap.appendChild(zone);
+    wrap.appendChild(preview);
+    wrap.appendChild(errorEl);
+    return wrap;
+  }
+
+  // ── Segmented ──
+  function buildSegmented(q, layoutPrefix) {
+    var opts = q.options || [];
+    var grp = document.createElement('div');
+    grp.className = 'segmented-group';
+    grp.setAttribute('role', 'group');
+    grp.setAttribute('aria-label', q.label || 'Options');
+
+    opts.forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'segmented-btn' + (state[q.id] === opt.value ? ' active' : '');
+      btn.textContent = opt.label;
+      btn.dataset.value = opt.value;
+      btn.dataset.qid = q.id;
+      btn.dataset.layout = layoutPrefix || '';
+      btn.setAttribute('aria-pressed', state[q.id] === opt.value ? 'true' : 'false');
+      btn.addEventListener('click', function () {
+        state[q.id] = opt.value;
+        document.querySelectorAll('.segmented-btn[data-qid="' + q.id + '"]').forEach(function (b) {
+          var active = b.dataset.value === opt.value;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      });
+      grp.appendChild(btn);
+    });
+
+    return grp;
+  }
+
+  // ── Slider ──
+  function buildSlider(q, layoutPrefix) {
+    var min  = q.min  != null ? Number(q.min)  : 0;
+    var max  = q.max  != null ? Number(q.max)  : 100;
+    var step = q.step != null ? Number(q.step) : 1;
+    var val  = state[q.id] != null ? Number(state[q.id]) : min;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'slider-wrap';
+
+    var input = document.createElement('input');
+    input.type = 'range';
+    input.className = 'slider-input';
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(val);
+    input.dataset.qid = q.id;
+    input.dataset.layout = layoutPrefix || '';
+    if (q.label) input.setAttribute('aria-label', q.label);
+    input.setAttribute('aria-valuemin', String(min));
+    input.setAttribute('aria-valuemax', String(max));
+    input.setAttribute('aria-valuenow', String(val));
+    if (q.anchors && q.anchors.length) {
+      input.setAttribute('aria-valuetext', nearestAnchorLabel(val, q.anchors) + ' (' + val + ')');
+    }
+    sliderFill(input, val, min, max);
+
+    var valueEl = document.createElement('span');
+    valueEl.className = 'slider-value';
+    valueEl.setAttribute('aria-hidden', 'true');
+    valueEl.textContent = String(val);
+
+    var row = document.createElement('div');
+    row.className = 'slider-row';
+    row.appendChild(input);
+    row.appendChild(valueEl);
+
+    var anchorsEl = null;
+    if (q.anchors && q.anchors.length) {
+      anchorsEl = document.createElement('div');
+      anchorsEl.className = 'slider-anchors';
+      q.anchors.forEach(function (anchor) {
+        var at = Math.max(min, Math.min(max, Number(anchor.at)));
+        var pct = max > min ? ((at - min) / (max - min)) * 100 : 0;
+        var lbl = document.createElement('span');
+        lbl.className = 'slider-anchor';
+        lbl.textContent = anchor.label;
+        lbl.dataset.at = String(at);
+        lbl.style.left = pct + '%';
+        anchorsEl.appendChild(lbl);
+      });
+      updateSliderAnchors(anchorsEl, val, q.anchors);
+    }
+
+    input.addEventListener('input', function () {
+      var v = Number(input.value);
+      state[q.id] = v;
+      sliderFill(input, v, min, max);
+      valueEl.textContent = String(v);
+      input.setAttribute('aria-valuenow', String(v));
+      if (q.anchors && q.anchors.length) {
+        input.setAttribute('aria-valuetext', nearestAnchorLabel(v, q.anchors) + ' (' + v + ')');
+        updateSliderAnchors(anchorsEl, v, q.anchors);
+      }
+      document.querySelectorAll('input[type="range"][data-qid="' + q.id + '"]').forEach(function (r) {
+        if (r === input) return;
+        r.value = String(v);
+        r.setAttribute('aria-valuenow', String(v));
+        sliderFill(r, v, min, max);
+        var sibWrap = r.closest('.slider-wrap');
+        if (sibWrap) {
+          var sibVal = sibWrap.querySelector('.slider-value');
+          if (sibVal) sibVal.textContent = String(v);
+          if (q.anchors && q.anchors.length) {
+            r.setAttribute('aria-valuetext', nearestAnchorLabel(v, q.anchors) + ' (' + v + ')');
+            var sibAnchors = sibWrap.querySelector('.slider-anchors');
+            if (sibAnchors) updateSliderAnchors(sibAnchors, v, q.anchors);
+          }
+        }
+      });
+    });
+
+    wrap.appendChild(row);
+    if (anchorsEl) wrap.appendChild(anchorsEl);
+    return wrap;
+  }
+
+  function sliderFill(input, val, min, max) {
+    var pct = max > min ? Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100)) : 0;
+    input.style.background = 'linear-gradient(to right, var(--if-color-accent) 0%, var(--if-color-accent) ' + pct + '%, var(--if-color-border) ' + pct + '%, var(--if-color-border) 100%)';
+  }
+
+  function updateSliderAnchors(anchorsEl, val, anchors) {
+    if (!anchorsEl || !anchors || !anchors.length) return;
+    var bestAt = null;
+    var bestDist = Infinity;
+    anchors.forEach(function (anchor) {
+      var d = Math.abs(val - Number(anchor.at));
+      if (d < bestDist) { bestDist = d; bestAt = Number(anchor.at); }
+    });
+    anchorsEl.querySelectorAll('.slider-anchor').forEach(function (el) {
+      el.classList.toggle('active', Number(el.dataset.at) === bestAt);
+    });
+  }
+
+  function nearestAnchorLabel(val, anchors) {
+    if (!anchors || !anchors.length) return String(val);
+    var best = null;
+    var bestDist = Infinity;
+    anchors.forEach(function (anchor) {
+      var d = Math.abs(Number(val) - Number(anchor.at));
+      if (d < bestDist) { bestDist = d; best = anchor; }
+    });
+    return best ? best.label : String(val);
+  }
+
+  // ── Priority rank (drag-reorder) ──
+  function buildPriorityRank(q, layoutPrefix) {
+    if (!Array.isArray(q.options) || !q.options.length) {
+      console.error('intake-form priority-rank "' + q.id + '": options array is required');
+      var err = document.createElement('div');
+      err.textContent = '[priority-rank: options array required]';
+      return err;
+    }
+
+    var listEl = document.createElement('div');
+    listEl.className = 'priority-rank-list';
+    listEl.setAttribute('role', 'list');
+    listEl.setAttribute('aria-label', q.label || 'Priority ranking');
+    listEl.dataset.qid = q.id;
+
+    function renderItems() {
+      while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+      var order = Array.isArray(state[q.id]) ? state[q.id] : [];
+      order.forEach(function (val, idx) {
+        var opt = (q.options || []).find(function (o) { return o.value === val; });
+        if (!opt) return;
+
+        var item = document.createElement('div');
+        item.className = 'priority-rank-item';
+        item.setAttribute('role', 'listitem');
+        item.setAttribute('draggable', 'true');
+        item.dataset.val = val;
+        item.dataset.idx = String(idx);
+
+        var rank = document.createElement('span');
+        rank.className = 'priority-rank-number';
+        rank.setAttribute('aria-hidden', 'true');
+        rank.textContent = String(idx + 1);
+        item.appendChild(rank);
+
+        var handle = document.createElement('span');
+        handle.className = 'priority-rank-handle';
+        handle.setAttribute('aria-hidden', 'true');
+        item.appendChild(handle);
+
+        var text = document.createElement('div');
+        text.className = 'priority-rank-text';
+        var strong = document.createElement('strong');
+        strong.textContent = opt.label;
+        text.appendChild(strong);
+        if (opt.description) {
+          var descEl = document.createElement('span');
+          descEl.textContent = opt.description;
+          text.appendChild(descEl);
+        }
+        item.appendChild(text);
+
+        var moves = document.createElement('div');
+        moves.className = 'priority-rank-moves';
+
+        var upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.className = 'priority-rank-move';
+        upBtn.setAttribute('aria-label', 'Move ' + opt.label + ' up');
+        upBtn.disabled = idx === 0;
+        upBtn.textContent = '↑';
+        (function (i) {
+          upBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            moveRankItem(q.id, i, i - 1);
+            focusRankBtn(listEl, i - 1, 0);
+          });
+          upBtn.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowUp' && i > 0) {
+              e.preventDefault();
+              moveRankItem(q.id, i, i - 1);
+              focusRankBtn(listEl, i - 1, 0);
+            }
+          });
+        })(idx);
+        moves.appendChild(upBtn);
+
+        var downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.className = 'priority-rank-move';
+        downBtn.setAttribute('aria-label', 'Move ' + opt.label + ' down');
+        downBtn.disabled = idx === order.length - 1;
+        downBtn.textContent = '↓';
+        (function (i, len) {
+          downBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            moveRankItem(q.id, i, i + 1);
+            focusRankBtn(listEl, i + 1, 1);
+          });
+          downBtn.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' && i < len - 1) {
+              e.preventDefault();
+              moveRankItem(q.id, i, i + 1);
+              focusRankBtn(listEl, i + 1, 1);
+            }
+          });
+        })(idx, order.length);
+        moves.appendChild(downBtn);
+
+        item.appendChild(moves);
+
+        // Drag-and-drop (mouse/pointer progressive enhancement)
+        item.addEventListener('dragstart', function (e) {
+          listEl.dataset.dragFrom = String(idx);
+          item.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+        });
+        item.addEventListener('dragend', function () {
+          item.classList.remove('dragging');
+          listEl.querySelectorAll('.priority-rank-item').forEach(function (el) {
+            el.classList.remove('drag-over');
+          });
+        });
+        item.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          listEl.querySelectorAll('.priority-rank-item').forEach(function (el) {
+            el.classList.remove('drag-over');
+          });
+          item.classList.add('drag-over');
+        });
+        item.addEventListener('drop', function (e) {
+          e.preventDefault();
+          var fromIdx = parseInt(listEl.dataset.dragFrom, 10);
+          if (isFinite(fromIdx) && fromIdx !== idx) {
+            moveRankItem(q.id, fromIdx, idx);
+          }
+          listEl.querySelectorAll('.priority-rank-item').forEach(function (el) {
+            el.classList.remove('drag-over');
+          });
+        });
+
+        listEl.appendChild(item);
+      });
+    }
+
+    listEl._renderItems = renderItems;
+    renderItems();
+    return listEl;
+  }
+
+  function focusRankBtn(listEl, itemIdx, btnIdx) {
+    setTimeout(function () {
+      var items = listEl.querySelectorAll('.priority-rank-item');
+      if (!items[itemIdx]) return;
+      var btns = items[itemIdx].querySelectorAll('.priority-rank-move');
+      var btn = btns[btnIdx] || btns[0];
+      if (btn && !btn.disabled) btn.focus();
+      else if (btns[1 - btnIdx] && !btns[1 - btnIdx].disabled) btns[1 - btnIdx].focus();
+    }, 0);
+  }
+
+  function moveRankItem(qId, fromIdx, toIdx) {
+    var ord = Array.isArray(state[qId]) ? state[qId].slice() : [];
+    if (fromIdx < 0 || fromIdx >= ord.length || toIdx < 0 || toIdx >= ord.length || fromIdx === toIdx) return;
+    var moved = ord.splice(fromIdx, 1)[0];
+    ord.splice(toIdx, 0, moved);
+    state[qId] = ord;
+    document.querySelectorAll('.priority-rank-list[data-qid="' + qId + '"]').forEach(function (el) {
+      if (typeof el._renderItems === 'function') el._renderItems();
+    });
+  }
+
+  function buildSectionLabel(text) {
+    var lbl = document.createElement('div');
+    lbl.className = 'wizard-section-label';
+    lbl.textContent = text;
+    return lbl;
+  }
+
+  function buildInferenceBox(text) {
+    var box = document.createElement('div');
+    box.className = 'inference-box';
+    var strong = document.createElement('strong');
+    strong.textContent = "What I'm seeing: ";
+    box.appendChild(strong);
+    box.appendChild(document.createTextNode(text));
+    return box;
+  }
+
+  function buildHr() {
+    var hr = document.createElement('hr');
+    hr.className = 'divider';
+    return hr;
+  }
+
+  function buildNavRow(hasBack, hasNext, isReview) {
+    var row = document.createElement('div');
+    row.className = 'nav-row';
+    if (hasBack) {
+      var back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'btn btn-ghost';
+      back.textContent = 'Back';
+      back.onclick = function () { wizardNav(-1); };
+      row.appendChild(back);
+    } else {
+      row.appendChild(document.createElement('span'));
+    }
+    if (hasNext) {
+      var next = document.createElement('button');
+      next.type = 'button';
+      next.className = 'btn btn-primary';
+      next.textContent = 'Next';
+      next.onclick = function () { wizardNav(1); };
+      row.appendChild(next);
+    } else {
+      row.appendChild(document.createElement('span'));
+    }
+    return row;
+  }
+
+  function buildExportBox(textId, copyFbId) {
+    var wrap = document.createElement('div');
+    var box = document.createElement('div');
+    box.className = 'export-box';
+    box.id = textId;
+    wrap.appendChild(box);
+    var actions = document.createElement('div');
+    actions.className = 'export-actions';
+    actions.style.marginTop = '10px';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'Copy for Claude';
+    btn.onclick = function () { copyExport(textId, copyFbId); };
+    actions.appendChild(btn);
+    var fb = document.createElement('span');
+    fb.className = 'copy-feedback';
+    fb.id = copyFbId;
+    fb.textContent = 'Copied!';
+    actions.appendChild(fb);
+    wrap.appendChild(actions);
+    return wrap;
+  }
+
+  function initStateFromQuestion(q) {
+    if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+    if (q.type === 'radio') {
+      var sel = (q.options || []).find(function (o) { return o.selected; });
+      state[q.id] = sel ? sel.value : null;
+    } else if (q.type === 'checkbox') {
+      var picks = (q.options || []).filter(function (o) { return o.selected; }).map(function (o) { return o.value; });
+      state[q.id] = picks;
+      checkboxSets[q.id] = new Set(picks);
+    } else if (q.type === 'scale') {
+      state[q.id] = q.default || null;
+    } else if (q.type === 'file-upload') {
+      state[q.id] = q.default || '';
+    } else if (q.type === 'segmented') {
+      var segSel = (q.options || []).find(function (o) { return o.selected; });
+      state[q.id] = q.default || (segSel ? segSel.value : null);
+    } else if (q.type === 'slider') {
+      var slMin = q.min != null ? Number(q.min) : 0;
+      state[q.id] = q.default != null ? Number(q.default) : slMin;
+    } else if (q.type === 'priority-rank') {
+      state[q.id] = Array.isArray(q.default) ? q.default.slice() : (q.options || []).map(function (o) { return o.value; });
+    } else {
+      state[q.id] = q.default || '';
+    }
+    if (q.conditional) {
+      var ckey = q.conditional.stateKey || (q.id + '_other');
+      if (state[ckey] === undefined) state[ckey] = '';
+    }
+    if (shouldAddCommentary(q)) {
+      var commKey = q.id + '_commentary';
+      if (state[commKey] === undefined) state[commKey] = '';
+    }
+  }
+
+  // ── Wizard navigation ──
+  function wizardNav(dir) {
+    var next = currentQ + dir;
+    if (next < 1 || next > TOTAL_Q) return;
+    var prev = document.getElementById('q' + currentQ);
+    if (prev) prev.classList.remove('active', 'fade-in');
+    var nxt = document.getElementById('q' + next);
+    if (nxt) {
+      nxt.classList.add('active', 'fade-in');
+      nxt.addEventListener('animationend', function () { nxt.classList.remove('fade-in'); }, { once: true });
+    }
+    currentQ = next;
+    if (next === TOTAL_Q) {
+      buildReview('wizard-review-content');
+      buildExport('export-text');
+    }
+    updateProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Layout toggle ──
+  function setLayout(mode) {
+    document.getElementById('layout-wizard').style.display = mode === 'wizard' ? 'block' : 'none';
+    document.getElementById('layout-grouped').style.display = mode === 'grouped' ? 'block' : 'none';
+    document.getElementById('btn-wizard').classList.toggle('active', mode === 'wizard');
+    document.getElementById('btn-grouped').classList.toggle('active', mode === 'grouped');
+    document.getElementById('progress-bar-wrap').style.display = mode === 'wizard' ? '' : 'none';
+    if (mode === 'grouped') {
+      buildReview('grouped-review-content');
+      buildExport('export-text-grouped');
+    }
+  }
+
+  // ── Grouped section nav ──
+  function groupedNav(idx, el) {
+    document.querySelectorAll('.grouped-section').forEach(function (s) { s.classList.remove('active'); });
+    document.querySelectorAll('.section-tab').forEach(function (t) { t.classList.remove('active'); });
+    var sec = document.getElementById('gs' + idx);
+    if (sec) sec.classList.add('active');
+    if (el) el.classList.add('active');
+    if (sec && sec.querySelector('.export-box')) {
+      buildReview('grouped-review-content');
+      buildExport('export-text-grouped');
+    }
+  }
+
+  // ── Progress bar ──
+  function updateProgress() {
+    var steps = document.getElementById('progress-steps');
+    if (!steps) return;
+    while (steps.firstChild) steps.removeChild(steps.firstChild);
+    for (var i = 0; i < TOTAL_Q; i++) {
+      var d = document.createElement('div');
+      d.className = 'progress-step' + (i < currentQ - 1 ? ' complete' : i === currentQ - 1 ? ' active' : '');
+      steps.appendChild(d);
+    }
+    document.getElementById('progress-section-label').textContent = SECTION_NAMES[currentQ - 1] || 'Review';
+    var pct = currentQ === TOTAL_Q ? 100 : Math.round(((currentQ - 1) / TOTAL_Q) * 100);
+    document.getElementById('progress-pct').textContent = pct + '% complete';
+  }
+
+  // ── Default review/export builders (spec-driven) ──
+  function buildReview(containerId) {
+    var c = document.getElementById(containerId);
+    if (!c || !SPEC) return;
+    while (c.firstChild) c.removeChild(c.firstChild);
+    SPEC.sections.forEach(function (sec) {
+      sec.questions.forEach(function (q) {
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+        reviewRow(c, q.label || q.id, displayValue(q));
+        var commKey = q.id + '_commentary';
+        if (shouldAddCommentary(q) && state[commKey]) {
+          reviewRow(c, '↳ commentary', state[commKey]);
+        }
+        // Multi-branch: if selected option has a branch, emit it
+        if (q.type === 'radio' && state[q.id]) {
+          var selOpt = (q.options || []).find(function (o) { return o.value === state[q.id] && o.branch; });
+          if (selOpt) {
+            reviewRow(c, selOpt.branch.label || selOpt.branch.id, displayValue(selOpt.branch));
+          }
+        }
+      });
+    });
+  }
+
+  function buildExport(boxId) {
+    var el = document.getElementById(boxId);
+    if (!el || !SPEC) return;
+    var lines = ['=== ' + (SPEC.exportTitle || 'INTAKE EXPORT') + ' ===', ''];
+    var keyWidth = 16;
+    SPEC.sections.forEach(function (sec) {
+      sec.questions.forEach(function (q) {
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+        var keyBase = (q.exportKey || q.id).toUpperCase();
+        lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true));
+        var commKey = q.id + '_commentary';
+        if (shouldAddCommentary(q) && state[commKey]) {
+          lines.push(padRight(keyBase + '_NOTE:', keyWidth) + state[commKey]);
+        }
+        // Multi-branch: if selected option has a branch, emit it
+        if (q.type === 'radio' && state[q.id]) {
+          var branchOpt = (q.options || []).find(function (o) { return o.value === state[q.id] && o.branch; });
+          if (branchOpt) {
+            var bq = branchOpt.branch;
+            lines.push(padRight((bq.exportKey || bq.id).toUpperCase() + ':', keyWidth) + displayValue(bq, true));
+          }
+        }
+      });
+    });
+    if (SPEC.knownContext && SPEC.knownContext.length) {
+      lines.push('', '--- Context already known ---');
+      SPEC.knownContext.forEach(function (l) { lines.push(l); });
+    }
+    if (SPEC.routing && Object.keys(SPEC.routing).length) {
+      lines.push('', '--- Routing suggestion ---');
+      Object.keys(SPEC.routing).forEach(function (k) {
+        lines.push(padRight(k, 22) + '-> ' + SPEC.routing[k]);
+      });
+    }
+    el.textContent = lines.join('\n');
+  }
+
+  function displayValue(q, forExport) {
+    var val = state[q.id];
+    if (q.type === 'radio') {
+      if (!val) return '(not answered)';
+      var opt = (q.options || []).find(function (o) { return o.value === val; });
+      var base = opt ? opt.label : val;
+      // Append conditional if "reveals" option is selected
+      if (opt && opt.reveals && q.conditional) {
+        var ckey = q.conditional.stateKey || (q.id + '_other');
+        if (state[ckey]) base += ' — ' + state[ckey];
+      }
+      return base;
+    }
+    if (q.type === 'checkbox') {
+      if (!Array.isArray(val) || !val.length) return '(none)';
+      return val.map(function (v) {
+        var o = (q.options || []).find(function (oo) { return oo.value === v; });
+        return o ? o.label : v;
+      }).join(forExport ? ' | ' : ', ');
+    }
+    if (q.type === 'scale') {
+      return val == null ? '(not answered)' : String(val);
+    }
+    if (q.type === 'file-upload') {
+      if (!val) return '(no file)';
+      if (forExport) return val;
+      var metaLine = val.split('\n')[0] || '';
+      var mMatch = metaLine.match(/^\[(.+) \| .+ \| (.+)\]$/);
+      return mMatch ? mMatch[1] + ' (' + mMatch[2] + ')' : '(file attached)';
+    }
+    if (q.type === 'segmented') {
+      if (!val) return '(not answered)';
+      var segOpt = (q.options || []).find(function (o) { return o.value === val; });
+      return segOpt ? segOpt.label : val;
+    }
+    if (q.type === 'slider') {
+      if (val == null) return '(not answered)';
+      if (!forExport && q.anchors && q.anchors.length) {
+        return String(val) + ' — ' + nearestAnchorLabel(val, q.anchors);
+      }
+      return String(val);
+    }
+    if (q.type === 'priority-rank') {
+      if (!Array.isArray(val) || !val.length) return '(not ranked)';
+      return val.map(function (v) {
+        var o = (q.options || []).find(function (oo) { return oo.value === v; });
+        return o ? o.label : v;
+      }).join(' > ');
+    }
+    return val || '(not answered)';
+  }
+
+  function padRight(s, n) {
+    while (s.length < n) s += ' ';
+    return s;
+  }
+
+  // ── Review row helper (XSS-safe; also exported) ──
+  function reviewRow(container, q, a) {
+    var isEmpty = !a || a === '(not answered)' || a === '(none)';
+    var item = document.createElement('div'); item.className = 'review-item';
+    var qEl = document.createElement('div'); qEl.className = 'review-q'; qEl.textContent = q;
+    var aEl = document.createElement('div'); aEl.className = 'review-a' + (isEmpty ? ' empty' : '');
+    aEl.textContent = Array.isArray(a) ? (a.length ? a.join(', ') : '(not answered)') : (a || '(not answered)');
+    item.appendChild(qEl); item.appendChild(aEl); container.appendChild(item);
+  }
+
+  // ── Clipboard (file:// safe) ──
+  function copyExport(boxId, feedbackId) {
+    var text = document.getElementById(boxId).textContent;
+    var feedback = document.getElementById(feedbackId);
+    function show() { feedback.classList.add('visible'); setTimeout(function () { feedback.classList.remove('visible'); }, 2000); }
+    function fallbackCopy() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta); show();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(show).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  }
+
+  // ── Public surface (inline handlers + custom override hooks) ──
+  window.wizardNav = wizardNav;
+  window.setLayout = setLayout;
+  window.groupedNav = groupedNav;
+  window.copyExport = copyExport;
+  window.reviewRow = reviewRow;
+  window.buildReview = buildReview;
+  window.buildExport = buildExport;
+})();

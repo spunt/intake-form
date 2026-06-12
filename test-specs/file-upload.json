@@ -1,0 +1,23 @@
+{
+  "title": "Document submission",
+  "heading": "Attach your document",
+  "subhead": "Per-primitive smoke test for the file-upload question type.",
+  "exportTitle": "DOCUMENT SUBMISSION",
+
+  "sections": [
+    {
+      "name": "Upload",
+      "questions": [
+        {
+          "id": "doc",
+          "type": "file-upload",
+          "label": "Upload your report",
+          "hint": "PDF or Word document. Max 1 MB.",
+          "accept": "application/pdf,application/msword",
+          "maxSizeKb": 1024,
+          "commentary": false
+        }
+      ]
+    }
+  ]
+}

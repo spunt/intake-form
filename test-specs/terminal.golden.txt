@@ -1,0 +1,10 @@
+=== DEPLOY CONFIG ===
+
+ENVIRONMENT:    stage
+REGION:         us-east-1
+REPLICAS:       2
+STRATEGY:       Blue-green
+ROLLBACK:       enabled
+PRIORITY:       Health check endpoint > Smoke test suite > Error rate baseline > p99 latency check
+TICKET:         (not answered)
+NOTES:          (not answered)

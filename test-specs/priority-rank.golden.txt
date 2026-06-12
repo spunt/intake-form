@@ -1,0 +1,3 @@
+=== INTAKE EXPORT ===
+
+PRIORITIES:     Accuracy > Speed > Cost > Explainability

@@ -1,0 +1,23 @@
+{
+  "name": "intake-form",
+  "version": "1.0.0",
+  "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export. Use when a request is underspecified and a human needs to fill the gaps before work begins.",
+  "author": {
+    "name": "Bob Spunt",
+    "url": "https://github.com/spunt"
+  },
+  "homepage": "https://github.com/spunt/intake-form",
+  "repository": "https://github.com/spunt/intake-form",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "claude-skill",
+    "agent-skill",
+    "intake-form",
+    "requirements-gathering",
+    "clarification",
+    "html-form",
+    "spec-driven"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "title": "Narrative card demo",
+  "heading": "Before we begin",
+  "subhead": "Per-primitive smoke test for the narrative-card question type.",
+  "exportTitle": "NARRATIVE CARD DEMO",
+
+  "sections": [
+    {
+      "name": "Context",
+      "questions": [
+        {
+          "id": "intro_card",
+          "type": "narrative-card",
+          "icon": "💡",
+          "title": "Here's what we're doing.",
+          "body": "This form exists to help you articulate what you already know. The questions are prompts, not interrogation. There are no wrong answers."
+        },
+        {
+          "id": "agreement",
+          "type": "segmented",
+          "label": "Ready to start?",
+          "commentary": false,
+          "default": "yes",
+          "options": [
+            { "value": "yes",   "label": "Yes, let's go" },
+            { "value": "later", "label": "Come back later" }
+          ]
+        }
+      ]
+    }
+  ]
+}

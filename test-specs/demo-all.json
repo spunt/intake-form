@@ -1,0 +1,185 @@
+{
+  "title": "Decision intake",
+  "heading": "Before we decide",
+  "subhead": "A kitchen-sink intake exercising every primitive the skill ships. Theme deliberately departs from the default to avoid reinforcing the cool-blue SaaS reflex.",
+  "exportTitle": "DECISION INTAKE",
+
+  "theme": {
+    "preset": "editorial",
+    "hue": 30,
+    "density": "airy",
+    "motion": { "intensity": "expressive", "curve": "quint" },
+    "voice": "thoughtful"
+  },
+
+  "sections": [
+    {
+      "name": "Decision frame",
+      "questions": [
+        {
+          "id": "reversibility",
+          "type": "radio",
+          "label": "If it goes badly, how hard is it to undo?",
+          "required": true,
+          "inferenceBox": "Most engineering decisions are more reversible than they feel in the moment. Be honest about which bucket this lives in.",
+          "options": [
+            { "value": "easy",     "label": "Easily reversible", "description": "Cost to undo is trivial.", "selected": true, "badge": "Likely match" },
+            { "value": "moderate", "label": "Moderately reversible", "description": "Costs hours to days to undo." },
+            { "value": "hard",     "label": "Hard to reverse", "description": "Compounds quickly; undoing is a project." },
+            { "value": "unsure",   "label": "Not sure", "unsure": true }
+          ]
+        },
+        {
+          "id": "confidence",
+          "type": "slider",
+          "label": "How confident are you in your own read of this decision?",
+          "min": 0,
+          "max": 100,
+          "step": 10,
+          "default": 50,
+          "commentary": false,
+          "anchors": [
+            { "at": 0,   "label": "Guessing" },
+            { "at": 50,  "label": "Reasonably sure" },
+            { "at": 100, "label": "Certain" }
+          ]
+        },
+        {
+          "id": "question",
+          "type": "textarea",
+          "label": "In one sentence, what is the actual question?",
+          "placeholder": "e.g., Should we adopt Postgres for the analytics path?",
+          "required": true,
+          "maxLength": 240
+        }
+      ]
+    },
+
+    {
+      "name": "Stakes & sequencing",
+      "questions": [
+        {
+          "id": "stakes_frame",
+          "type": "narrative-card",
+          "icon": "⚖️",
+          "title": "Now for the stakes.",
+          "body": "Understanding what's on the line — and how you weight competing concerns — shapes the recommendation you'll get back."
+        },
+        {
+          "id": "factor_order",
+          "type": "priority-rank",
+          "label": "Order the decision factors from most to least weight",
+          "hint": "Drag rows or use the ↑↓ buttons. Top position gets the most weight on your final call.",
+          "options": [
+            { "value": "impact",        "label": "Expected impact",   "description": "How much does this move the needle?" },
+            { "value": "risk",          "label": "Downside risk",     "description": "How bad is the worst case?" },
+            { "value": "speed",         "label": "Time to execute",   "description": "How long before you see results?" },
+            { "value": "reversibility", "label": "Reversibility",     "description": "Can you undo it if you're wrong?" }
+          ]
+        },
+        {
+          "id": "decision_mode",
+          "type": "segmented",
+          "label": "How will this decision be made?",
+          "commentary": false,
+          "default": "consulted",
+          "options": [
+            { "value": "solo",      "label": "Solo" },
+            { "value": "consulted", "label": "Consulted" },
+            { "value": "consensus", "label": "Consensus" }
+          ]
+        },
+        {
+          "id": "capital",
+          "type": "scale",
+          "label": "How much capital is at risk?",
+          "anchors": ["Trivial", "Bet-the-company"],
+          "default": 2
+        },
+        {
+          "id": "constraints",
+          "type": "checkbox",
+          "label": "Which constraints actually bind?",
+          "hint": "Pick what is genuinely non-negotiable, not aspirational.",
+          "options": [
+            { "value": "time",    "label": "Time", "description": "There's an external deadline.", "selected": true },
+            { "value": "money",   "label": "Money", "description": "Budget envelope is fixed." },
+            { "value": "people",  "label": "People", "description": "Headcount is fixed." },
+            { "value": "compliance","label": "Compliance", "description": "Legal or policy requirement." },
+            { "value": "none",    "label": "None of these are binding", "unsure": true }
+          ]
+        },
+        {
+          "id": "deciders",
+          "type": "radio",
+          "label": "Will you decide alone, or with others?",
+          "required": true,
+          "options": [
+            { "value": "alone",     "label": "Alone", "description": "Your call, full stop.",
+              "branch": {
+                "id": "solo_rationale",
+                "type": "text",
+                "label": "Why solo? (optional)",
+                "placeholder": "e.g., 'on-call decision', 'no stakeholders in scope'"
+              }
+            },
+            { "value": "with_team", "label": "With others", "description": "Buy-in needed before this can land.", "selected": true,
+              "branch": {
+                "id": "deciders_who",
+                "type": "text",
+                "label": "Whose buy-in is needed?",
+                "placeholder": "e.g., 'eng lead + PM'"
+              }
+            },
+            { "value": "unsure",    "label": "Not sure yet", "unsure": true }
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "Time",
+      "questions": [
+        {
+          "id": "deadline",
+          "type": "radio",
+          "label": "What is the decision deadline?",
+          "required": true,
+          "options": [
+            { "value": "today",      "label": "Today" },
+            { "value": "this_week",  "label": "This week", "selected": true },
+            { "value": "this_month", "label": "This month" },
+            { "value": "open",       "label": "No hard deadline" },
+            { "value": "unsure",     "label": "Not sure", "unsure": true }
+          ],
+          "commentary": false
+        },
+        {
+          "id": "trigger",
+          "type": "text",
+          "label": "Any unmovable date or external trigger?",
+          "placeholder": "e.g., 'board meeting 2026-06-01' or leave blank"
+        },
+        {
+          "id": "supporting_doc",
+          "type": "file-upload",
+          "label": "Attach any supporting document (optional)",
+          "hint": "Briefing notes, prior analysis, or relevant data. Embedded in the export.",
+          "accept": "image/*,application/pdf,text/plain",
+          "maxSizeKb": 512,
+          "commentary": false
+        }
+      ]
+    }
+  ],
+
+  "knownContext": [
+    "User: a senior engineer on a small product team.",
+    "Decision archive: prior decisions are logged in the team's decision record."
+  ],
+
+  "routing": {
+    "ask.reversibility":   "route to a structured decision workflow with reversibility as the primary axis when 'hard'",
+    "ask.deciders":        "loop in the wider group when buy-in needs to be broad"
+  }
+}

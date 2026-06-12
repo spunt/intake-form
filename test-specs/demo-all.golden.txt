@@ -1,0 +1,22 @@
+=== DECISION INTAKE ===
+
+REVERSIBILITY:  Easily reversible
+CONFIDENCE:     50
+QUESTION:       (not answered)
+FACTOR_ORDER:   Expected impact > Downside risk > Time to execute > Reversibility
+DECISION_MODE:  Consulted
+CAPITAL:        2
+CONSTRAINTS:    Time
+DECIDERS:       With others
+DECIDERS_WHO:   (not answered)
+DEADLINE:       This week
+TRIGGER:        (not answered)
+SUPPORTING_DOC: (no file)
+
+--- Context already known ---
+User: a senior engineer on a small product team.
+Decision archive: prior decisions are logged in the team's decision record.
+
+--- Routing suggestion ---
+ask.reversibility     -> route to a structured decision workflow with reversibility as the primary axis when 'hard'
+ask.deciders          -> loop in the wider group when buy-in needs to be broad

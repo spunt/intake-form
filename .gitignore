@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+
+# Node (verification harness in tools/)
+node_modules/
+tools/node_modules/
+
+# Generated/scratch render output from the harness
+tools/.tmp/
+tools/.last-render/
+*.preview.html
+
+# Editor / agent local state (regenerable, not part of the project)
+.code-review-graph/
+.playwright-mcp/
+.cursor/
+.claude/

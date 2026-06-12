@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/spunt/intake-form/main/theme.schema.json",
+  "title": "intake-form theme block",
+  "description": "Optional `theme` field at the spec root. Translates to --if-* CSS custom-property writes on <html> at form load via applyTheme(spec) in ifbase.js.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "preset": {
+      "type": "string",
+      "enum": ["default", "editorial", "terminal", "kraft", "studio"],
+      "description": "Activates :root[data-theme=<preset>] CSS block. Falls back to default tokens silently if the preset has not shipped yet."
+    },
+    "hue": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 360,
+      "description": "Sets --if-hue (0–360, modulo applied). Shifts the entire tinted-neutral + accent palette."
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Per-token OKLCH overrides. Values must be valid OKLCH strings.",
+      "properties": {
+        "accent":         { "type": "string", "pattern": "^oklch\\(" },
+        "accent-hover":   { "type": "string", "pattern": "^oklch\\(" },
+        "accent-soft":    { "type": "string", "pattern": "^oklch\\(" },
+        "accent-soft2":   { "type": "string", "pattern": "^oklch\\(" },
+        "bg":             { "type": "string", "pattern": "^oklch\\(" },
+        "surface":        { "type": "string", "pattern": "^oklch\\(" },
+        "surface-soft":   { "type": "string", "pattern": "^oklch\\(" },
+        "border":         { "type": "string", "pattern": "^oklch\\(" },
+        "border-strong":  { "type": "string", "pattern": "^oklch\\(" },
+        "text":           { "type": "string", "pattern": "^oklch\\(" },
+        "text-muted":     { "type": "string", "pattern": "^oklch\\(" },
+        "text-dim":       { "type": "string", "pattern": "^oklch\\(" },
+        "success":        { "type": "string", "pattern": "^oklch\\(" },
+        "warning":        { "type": "string", "pattern": "^oklch\\(" },
+        "danger":         { "type": "string", "pattern": "^oklch\\(" }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "display": { "type": "string", "enum": ["sans", "serif", "mono"] },
+        "body":    { "type": "string", "enum": ["sans", "serif", "mono"] },
+        "scale":   { "type": "number", "minimum": 0.85, "maximum": 1.3 }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "intensity": { "type": "string", "enum": ["off", "subtle", "default", "expressive"] },
+        "curve":     { "type": "string", "enum": ["quart", "quint", "expo"] }
+      }
+    },
+    "density": {
+      "oneOf": [
+        { "type": "string", "enum": ["compact", "default", "airy"] },
+        { "type": "number", "minimum": 0.7, "maximum": 1.4 }
+      ]
+    },
+    "voice": {
+      "type": "string",
+      "description": "Tone hint stored on <html data-voice>. No styling effect on its own; consumed by storytelling layers (D1–D3)."
+    }
+  }
+}

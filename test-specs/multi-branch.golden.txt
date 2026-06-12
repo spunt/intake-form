@@ -1,0 +1,4 @@
+=== OUTPUT FORMAT ===
+
+OUTPUT_FORMAT:  Written report
+REPORT_LENGTH:  Medium (5–10 pages)

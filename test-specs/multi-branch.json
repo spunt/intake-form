@@ -1,0 +1,69 @@
+{
+  "title": "Output format",
+  "heading": "What do you need from this analysis?",
+  "subhead": "Per-primitive smoke test for multi-branch radio options.",
+  "exportTitle": "OUTPUT FORMAT",
+
+  "sections": [
+    {
+      "name": "Format",
+      "questions": [
+        {
+          "id": "output_format",
+          "type": "radio",
+          "label": "What format do you need?",
+          "commentary": false,
+          "options": [
+            {
+              "value": "report",
+              "label": "Written report",
+              "description": "Narrative doc with findings and recommendations.",
+              "selected": true,
+              "branch": {
+                "id": "report_length",
+                "type": "segmented",
+                "label": "Target length",
+                "commentary": false,
+                "default": "medium",
+                "options": [
+                  { "value": "short",  "label": "Short (1–3 pages)" },
+                  { "value": "medium", "label": "Medium (5–10 pages)" },
+                  { "value": "long",   "label": "Long (10+ pages)" }
+                ]
+              }
+            },
+            {
+              "value": "slides",
+              "label": "Slide deck",
+              "description": "Presentation-ready; 10–20 slides.",
+              "branch": {
+                "id": "slide_audience",
+                "type": "text",
+                "label": "Who is the primary audience?",
+                "placeholder": "e.g., 'executive team' or 'engineering leads'"
+              }
+            },
+            {
+              "value": "dashboard",
+              "label": "Interactive dashboard",
+              "description": "Live charts; self-serve exploration.",
+              "branch": {
+                "id": "dashboard_refresh",
+                "type": "segmented",
+                "label": "Refresh cadence",
+                "commentary": false,
+                "default": "daily",
+                "options": [
+                  { "value": "live",   "label": "Live" },
+                  { "value": "daily",  "label": "Daily" },
+                  { "value": "weekly", "label": "Weekly" }
+                ]
+              }
+            },
+            { "value": "unsure", "label": "Not sure yet", "unsure": true }
+          ]
+        }
+      ]
+    }
+  ]
+}

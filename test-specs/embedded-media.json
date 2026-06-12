@@ -1,0 +1,33 @@
+{
+  "title": "Media embed demo",
+  "heading": "Supporting evidence",
+  "subhead": "Per-primitive smoke test for the embedded-media question type.",
+  "exportTitle": "MEDIA EMBED DEMO",
+
+  "sections": [
+    {
+      "name": "Evidence",
+      "questions": [
+        {
+          "id": "screenshot",
+          "type": "embedded-media",
+          "src": "https://picsum.photos/seed/intake/600/300",
+          "alt": "Sample dashboard screenshot",
+          "caption": "Current state of the dashboard as of last sprint."
+        },
+        {
+          "id": "verdict",
+          "type": "radio",
+          "label": "Does this evidence support the proposal?",
+          "required": true,
+          "commentary": false,
+          "options": [
+            { "value": "yes",     "label": "Yes", "selected": true },
+            { "value": "no",      "label": "No" },
+            { "value": "partial", "label": "Partially" }
+          ]
+        }
+      ]
+    }
+  ]
+}

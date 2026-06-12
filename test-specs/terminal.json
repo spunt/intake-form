@@ -1,0 +1,108 @@
+{
+  "title": "Deploy Configuration",
+  "heading": "Release parameters",
+  "subhead": "Configure the deployment target. All fields are required unless marked optional.",
+  "exportTitle": "DEPLOY CONFIG",
+  "theme": { "preset": "terminal" },
+
+  "sections": [
+    {
+      "name": "Target",
+      "questions": [
+        {
+          "id": "environment",
+          "type": "segmented",
+          "label": "Environment",
+          "required": true,
+          "options": [
+            { "value": "dev",   "label": "dev" },
+            { "value": "stage", "label": "stage", "selected": true },
+            { "value": "prod",  "label": "prod" }
+          ]
+        },
+        {
+          "id": "region",
+          "type": "radio",
+          "label": "AWS region",
+          "required": true,
+          "commentary": false,
+          "options": [
+            { "value": "us-east-1",      "label": "us-east-1",      "description": "N. Virginia — primary", "selected": true },
+            { "value": "us-west-2",      "label": "us-west-2",      "description": "Oregon — secondary" },
+            { "value": "eu-central-1",   "label": "eu-central-1",   "description": "Frankfurt — EU data residency" },
+            { "value": "ap-southeast-1", "label": "ap-southeast-1", "description": "Singapore — APAC" }
+          ]
+        },
+        {
+          "id": "replicas",
+          "type": "slider",
+          "label": "Replica count",
+          "required": true,
+          "min": 1,
+          "max": 16,
+          "default": 2,
+          "step": 1,
+          "anchors": ["1 (minimal)", "16 (high-availability)"]
+        }
+      ]
+    },
+    {
+      "name": "Release",
+      "questions": [
+        {
+          "id": "strategy",
+          "type": "radio",
+          "label": "Rollout strategy",
+          "required": true,
+          "commentary": false,
+          "options": [
+            { "value": "rolling",   "label": "Rolling update",   "description": "Zero-downtime; replaces pods one at a time" },
+            { "value": "blue-green","label": "Blue-green",       "description": "Full parallel deployment; instant cutover", "selected": true },
+            { "value": "canary",    "label": "Canary",           "description": "10% traffic shift; manual promotion required" }
+          ]
+        },
+        {
+          "id": "rollback",
+          "type": "segmented",
+          "label": "Auto-rollback on error rate >5%",
+          "required": true,
+          "options": [
+            { "value": "enabled",  "label": "enabled",  "selected": true },
+            { "value": "disabled", "label": "disabled" }
+          ]
+        },
+        {
+          "id": "priority",
+          "type": "priority-rank",
+          "label": "Post-deploy verification order",
+          "required": true,
+          "options": [
+            { "value": "healthcheck", "label": "Health check endpoint" },
+            { "value": "smoke",       "label": "Smoke test suite" },
+            { "value": "metrics",     "label": "Error rate baseline" },
+            { "value": "latency",     "label": "p99 latency check" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notes",
+      "questions": [
+        {
+          "id": "ticket",
+          "type": "text",
+          "label": "Jira ticket (optional)",
+          "hint": "e.g. ENG-4821",
+          "required": false
+        },
+        {
+          "id": "notes",
+          "type": "textarea",
+          "label": "Release notes",
+          "hint": "What changed. Paste changelog or write a summary.",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "intake-form-tools",
+  "private": true,
+  "type": "module",
+  "description": "Verification harness for the intake-form skill. Not shipped; dev-only.",
+  "scripts": {
+    "render": "node render-test.mjs",
+    "axe": "node axe-audit.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.58.0",
+    "@axe-core/playwright": "^4.10.0"
+  }
+}

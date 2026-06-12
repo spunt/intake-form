@@ -1,0 +1,64 @@
+{
+  "title": "Smoke",
+  "heading": "Harness smoke test",
+  "subhead": "Minimal spec exercising every existing primitive. Used by tools/render-test.mjs and tools/axe-audit.mjs to verify the harness is healthy.",
+  "exportTitle": "SMOKE EXPORT",
+  "sections": [
+    {
+      "name": "Closed choices",
+      "questions": [
+        {
+          "id": "shape",
+          "type": "radio",
+          "label": "Pick a shape.",
+          "required": true,
+          "options": [
+            { "value": "circle",   "label": "Circle",   "selected": true, "badge": "Likely match" },
+            { "value": "square",   "label": "Square" },
+            { "value": "triangle", "label": "Triangle" },
+            { "value": "unsure",   "label": "Not sure", "unsure": true }
+          ]
+        },
+        {
+          "id": "tags",
+          "type": "checkbox",
+          "label": "Pick zero or more tags.",
+          "options": [
+            { "value": "alpha", "label": "Alpha" },
+            { "value": "beta",  "label": "Beta", "selected": true },
+            { "value": "gamma", "label": "Gamma" }
+          ]
+        },
+        {
+          "id": "weight",
+          "type": "scale",
+          "label": "How much does this matter?",
+          "anchors": ["Trivial", "Critical"],
+          "default": 3
+        }
+      ]
+    },
+    {
+      "name": "Open answers",
+      "questions": [
+        {
+          "id": "name",
+          "type": "text",
+          "label": "Short label.",
+          "placeholder": "e.g., my-thing"
+        },
+        {
+          "id": "context",
+          "type": "textarea",
+          "label": "Anything else worth knowing?",
+          "placeholder": "Optional context",
+          "maxLength": 240
+        }
+      ]
+    }
+  ],
+  "knownContext": [
+    "This is a harness smoke test, not a real intake."
+  ],
+  "routing": {}
+}
