@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-06
+
+Documentation/structure refactor — no runtime behavior change.
+
+- Moved the full `--if-*` token contract, preset catalog, and `theme`-block field
+  reference out of `SKILL.md` into `references/theming.md`. `SKILL.md` keeps a condensed
+  pointer plus the load-bearing constraints (spec-block-only theming, no per-form CSS,
+  OKLCH-only). Trims the always-loaded skill body from 421 to 345 lines; the cold-path
+  theming detail is now read on demand.
+- Removed internal roadmap codes (C3/C4/E2/D1–D3) from user-facing docs.
+- Added a worked-example pointer to `examples/question-type-catalog.json`.
+- Consolidated duplicated save-path guidance.
+
 ## [1.0.0] — 2026-06
 
 First public release.

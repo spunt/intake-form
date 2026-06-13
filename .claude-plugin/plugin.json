@@ -1,6 +1,6 @@
 {
   "name": "intake-form",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export. Use when a request is underspecified and a human needs to fill the gaps before work begins.",
   "author": {
     "name": "Bob Spunt",
