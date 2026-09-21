@@ -1,17 +1,23 @@
 === DECISION INTAKE ===
 
-REVERSIBILITY:  Easily reversible
-CONFIDENCE:     50
-QUESTION:       (not answered)
-FACTOR_ORDER:   Expected impact > Downside risk > Time to execute > Reversibility
-DECISION_MODE:  Consulted
-CAPITAL:        2
-CONSTRAINTS:    Time
-DECIDERS:       With others
-DECIDERS_WHO:   (not answered)
-DEADLINE:       This week
-TRIGGER:        (not answered)
-SUPPORTING_DOC: (no file)
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+
+REVERSIBILITY:       (not answered)
+CONFIDENCE:          50   [UNTOUCHED DEFAULT — not confirmed by respondent]
+QUESTION:            (not answered)
+FACTOR_ORDER:        Expected impact > Downside risk > Time to execute > Reversibility   [UNTOUCHED DEFAULT — not confirmed by respondent]
+DECISION_MODE:       (not answered)
+CAPITAL:             (not answered)
+CONSTRAINTS:         (none)
+DECIDERS:            (not answered)
+DEADLINE:            (not answered)
+TRIGGER:             (not answered)
+SUPPORTING_DOC:      (no file)
 
 --- Context already known ---
 User: a senior engineer on a small product team.

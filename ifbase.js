@@ -15,14 +15,37 @@
   // ── Module state ──
   var state = {};
   var checkboxSets = {};
+  var skipped = {};        // qId -> { reason: string }  — explicit skips (see § Skip)
+  var flags = {};          // qId -> { kind: string, note: string } — per-question meta-feedback
+  var formCritique = {};   // form-level meta-feedback: { kinds: [], note: '' }
   var currentQ = 1;
   var TOTAL_Q = 1;
   var SECTION_NAMES = ['Review'];
+  var STEPS = [];          // flattened [{section, sectionIdx, question}] — drives the TOC
   var SPEC = null;
 
   // Expose for inline handlers in template + custom export functions.
   window.state = state;
   window.checkboxSets = checkboxSets;
+  window.skipped = skipped;
+  window.flags = flags;
+
+  // Skip reasons. The distinction matters: "not applicable" and "don't know" are
+  // different signals to the consuming agent, and collapsing them loses information.
+  var SKIP_REASONS = [
+    { value: 'not_applicable', label: "Doesn't apply" },
+    { value: 'dont_know',      label: "Don't know" },
+    { value: 'prefer_not',     label: 'Prefer not to say' }
+  ];
+
+  // Form-level critique options — the "you're asking the wrong questions" escape hatch.
+  var CRITIQUE_KINDS = [
+    { value: 'wrong_level',     label: 'Wrong level of detail' },
+    { value: 'too_specific',    label: 'Too specific / in the weeds' },
+    { value: 'underspecified',  label: 'Too vague to answer' },
+    { value: 'missing_topic',   label: 'Missing the real question' },
+    { value: 'irrelevant',      label: 'Not relevant to this work' }
+  ];
 
   // ── Entry point ──
   document.addEventListener('DOMContentLoaded', function () {
@@ -246,6 +269,12 @@
     document.getElementById('heading-slot').textContent = spec.heading || '';
     document.getElementById('subhead-slot').textContent = spec.subhead || '';
 
+    if (spec.sources) {
+      var hdr = document.querySelector('.header');
+      var hsrc = buildSources(spec.sources, spec.sourcesLabel || 'Background material');
+      if (hdr && hsrc) hdr.appendChild(hsrc);
+    }
+
     // Inject theme switcher into topbar
     var topbar = document.querySelector('.topbar');
     var toggle = document.getElementById('layout-toggle');
@@ -306,51 +335,62 @@
     reviewStep.appendChild(buildNavRow(true, false, true));
     wizard.appendChild(reviewStep);
 
-    // ── Build grouped layout (only if multiple sections) ──
-    if (spec.sections.length > 1) {
-      document.getElementById('layout-toggle').hidden = false;
-      var tabs = document.createElement('div');
-      tabs.className = 'section-tabs';
-      spec.sections.forEach(function (sec, sIdx) {
-        var tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'section-tab' + (sIdx === 0 ? ' active' : '');
-        tab.textContent = sec.name;
-        tab.onclick = function () { groupedNav(sIdx, tab); };
-        tabs.appendChild(tab);
-      });
-      var exportTab = document.createElement('button');
-      exportTab.type = 'button';
-      exportTab.className = 'section-tab';
-      exportTab.textContent = 'Export';
-      exportTab.onclick = function () { groupedNav(spec.sections.length, exportTab); };
-      tabs.appendChild(exportTab);
-      grouped.appendChild(tabs);
+    // ── Build grouped layout ──
+    // "All sections" now means ALL sections, rendered as one continuous scroll.
+    // The old tab strip contradicted its own label (it showed one section at a
+    // time) and overflowed badly with more than ~7 sections; the sidebar TOC
+    // replaces it as the navigation affordance.
+    document.getElementById('layout-toggle').hidden = spec.sections.length <= 1;
+    spec.sections.forEach(function (sec, sIdx) {
+      var secEl = document.createElement('section');
+      secEl.className = 'grouped-section';
+      secEl.id = 'gs' + sIdx;
 
-      spec.sections.forEach(function (sec, sIdx) {
-        var secEl = document.createElement('div');
-        secEl.className = 'grouped-section' + (sIdx === 0 ? ' active' : '');
-        secEl.id = 'gs' + sIdx;
-        sec.questions.forEach(function (q) {
-          if (q.inferenceBox) secEl.appendChild(buildInferenceBox(q.inferenceBox));
-          secEl.appendChild(buildQuestion(q, 'g'));
-        });
-        grouped.appendChild(secEl);
-      });
+      var head = document.createElement('h2');
+      head.className = 'grouped-section-head';
+      head.textContent = sec.name;
+      secEl.appendChild(head);
 
-      var exportSec = document.createElement('div');
-      exportSec.className = 'grouped-section';
-      exportSec.id = 'gs' + spec.sections.length;
-      var groupedReview = document.createElement('div');
-      groupedReview.id = 'grouped-review-content';
-      exportSec.appendChild(groupedReview);
-      exportSec.appendChild(buildHr());
-      exportSec.appendChild(buildExportBox('export-text-grouped', 'copy-fb-g'));
-      grouped.appendChild(exportSec);
-    } else {
-      document.getElementById('layout-toggle').hidden = true;
-      // Single-section forms: also render the export inline at end of wizard review (already done above)
-    }
+      sec.questions.forEach(function (q) {
+        if (q.inferenceBox) secEl.appendChild(buildInferenceBox(q.inferenceBox));
+        secEl.appendChild(buildQuestion(q, 'g'));
+      });
+      grouped.appendChild(secEl);
+    });
+
+    var exportSec = document.createElement('section');
+    exportSec.className = 'grouped-section';
+    exportSec.id = 'gs' + spec.sections.length;
+    var exportHead = document.createElement('h2');
+    exportHead.className = 'grouped-section-head';
+    exportHead.textContent = 'Review & export';
+    exportSec.appendChild(exportHead);
+    var groupedReview = document.createElement('div');
+    groupedReview.id = 'grouped-review-content';
+    exportSec.appendChild(groupedReview);
+    exportSec.appendChild(buildHr());
+    exportSec.appendChild(buildExportBox('export-text-grouped', 'copy-fb-g'));
+    grouped.appendChild(exportSec);
+
+    // ── Sidebar TOC + critique panel ──
+    STEPS = steps;
+    var shell = document.getElementById('if-shell') || document.body;
+    var sidebar = buildSidebar(spec);
+    shell.insertBefore(sidebar, shell.firstChild);
+    document.body.appendChild(buildCritiquePanel());
+
+    // Mobile fallback: the sidebar (and its critique button) is hidden below
+    // 1100px, so the escape hatch would be unreachable exactly where forms feel
+    // longest. This floating button appears only in that range.
+    var fab = document.createElement('button');
+    fab.type = 'button';
+    fab.className = 'critique-fab';
+    fab.id = 'critique-fab';
+    fab.textContent = '⚑ Wrong questions?';
+    fab.addEventListener('click', openCritique);
+    document.body.appendChild(fab);
+
+    refreshTOC();
   }
 
   // ── Question builder ──
@@ -379,6 +419,11 @@
       hint.className = 'question-hint';
       hint.textContent = q.hint;
       wrap.appendChild(hint);
+    }
+
+    if (q.sources && !isDisplay) {
+      var qsrc = buildSources(q.sources, q.sourcesLabel || 'Reference material');
+      if (qsrc) wrap.appendChild(qsrc);
     }
 
     var body;
@@ -417,15 +462,25 @@
           }, layoutPrefix);
       cond.appendChild(condInput);
 
-      // Reveal default state if a "reveals" option is currently selected
-      var sel = (q.options || []).find(function (o) { return o.selected; });
-      if (sel && sel.reveals) cond.classList.add('visible');
+      // Nothing is pre-selected (R1), so a conditional never starts visible.
+      // It reveals on the user's own click via the radio change handler.
 
       wrap.appendChild(cond);
     }
 
     if (shouldAddCommentary(q)) {
       wrap.appendChild(buildCommentary(q, layoutPrefix));
+    }
+
+    // Skip + flag row. Display-only types have nothing to skip or answer.
+    if (!isDisplay) {
+      var meta = document.createElement('div');
+      meta.className = 'question-meta';
+      meta.appendChild(buildSkipControl(q));
+      meta.appendChild(buildFlagControl(q));
+      wrap.appendChild(meta);
+      if (skipped[q.id]) wrap.classList.add('is-skipped');
+      if (flags[q.id]) wrap.classList.add('is-flagged');
     }
     return wrap;
   }
@@ -471,8 +526,21 @@
     ta.style.height = (ta.scrollHeight ? ta.scrollHeight : 28) + 'px';
   }
 
+  // Factual questions get an explicit "Not sure" escape hatch, because a user can
+  // genuinely not know the answer and a forced guess becomes a false constraint.
+  // Judgment questions do not: the user does have a preference, and an escape hatch
+  // there invites satisficing (Krosnick et al. 2002). Authors declare intent via
+  // q.kind; the renderer applies the rule so nobody has to remember it.
+  function resolveOptions(q) {
+    var opts = (q.options || []).slice();
+    if (q.kind !== 'factual') return opts;
+    var hasEscape = opts.some(function (o) { return o.unsure; });
+    if (!hasEscape) opts.push({ value: 'not_sure', label: 'Not sure', unsure: true });
+    return opts;
+  }
+
   function buildRadioGroup(q, layoutPrefix) {
-    var opts = q.options || [];
+    var opts = resolveOptions(q);
     var hasBranches = opts.some(function (o) { return o.branch; });
     var group = document.createElement('div');
     group.className = 'radio-group';
@@ -486,11 +554,15 @@
       input.type = 'radio';
       input.name = layoutPrefix + '-' + q.id;
       input.value = opt.value;
-      input.checked = state[q.id] != null ? state[q.id] === opt.value : !!opt.selected;
+      // No pre-selection: a waved-through guess is indistinguishable from an
+      // endorsed answer in the export, which defeats the point of asking (R1).
+      // The agent's hypothesis is surfaced as a badge/inferenceBox instead.
+      input.checked = state[q.id] != null && state[q.id] === opt.value;
       input.dataset.qid = q.id;
       input.addEventListener('change', function () {
         if (!input.checked) return;
         state[q.id] = input.value;
+        clearSkip(q.id);
         document.querySelectorAll('input[type="radio"][data-qid="' + q.id + '"]').forEach(function (r) {
           r.checked = (r.value === input.value);
         });
@@ -545,9 +617,10 @@
       input.type = 'checkbox';
       input.name = layoutPrefix + '-' + q.id;
       input.value = opt.value;
-      input.checked = !!opt.selected;
+      input.checked = (checkboxSets[q.id] || new Set()).has(opt.value);
       input.dataset.qid = q.id;
       input.addEventListener('change', function () {
+        clearSkip(q.id);
         // Sync the matching value across layouts
         document.querySelectorAll('input[type="checkbox"][data-qid="' + q.id + '"][value="' + input.value + '"]').forEach(function (c) {
           c.checked = input.checked;
@@ -647,29 +720,82 @@
     return inp;
   }
 
+  // Scale implements the APG rating-radio-group pattern: role=radiogroup on the
+  // container, role=radio + aria-checked per point, roving tabindex, and arrow-key
+  // navigation. Plain <button>s pass axe individually but do not announce as a
+  // single-choice group, so screen-reader users cannot tell how many points exist
+  // or which is selected.
+  //
+  // q.labels (one string per point) renders a fully labeled scale, which yields
+  // higher reliability than endpoint-only anchors. q.anchors stays supported.
   function buildScale(q, layoutPrefix) {
     var wrap = document.createElement('div');
+    var points = Array.isArray(q.labels) && q.labels.length ? q.labels.length : (q.points || 5);
+    var labeled = Array.isArray(q.labels) && q.labels.length === points;
+
     var row = document.createElement('div');
-    row.className = 'scale-row';
-    for (var i = 1; i <= 5; i++) {
+    row.className = 'scale-row' + (labeled ? ' scale-row-labeled' : '');
+    row.setAttribute('role', 'radiogroup');
+    if (q.label) row.setAttribute('aria-label', q.label);
+
+    function select(n) {
+      state[q.id] = n;
+      clearSkip(q.id);
+      document.querySelectorAll('.scale-btn[data-qid="' + q.id + '"]').forEach(function (b) {
+        var on = parseInt(b.dataset.scaleVal, 10) === n;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      });
+      refreshTOC();
+    }
+
+    for (var i = 1; i <= points; i++) {
       (function (n) {
+        var isOn = state[q.id] === n;
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'scale-btn' + (state[q.id] === n ? ' active' : '');
-        btn.textContent = n;
+        btn.className = 'scale-btn' + (isOn ? ' active' : '');
+        btn.setAttribute('role', 'radio');
+        btn.setAttribute('aria-checked', isOn ? 'true' : 'false');
+        // Roving tabindex: with nothing selected the first point is the tab stop.
+        btn.tabIndex = isOn || (state[q.id] == null && n === 1) ? 0 : -1;
         btn.dataset.qid = q.id;
         btn.dataset.scaleVal = n;
-        btn.addEventListener('click', function () {
-          state[q.id] = n;
-          document.querySelectorAll('.scale-btn[data-qid="' + q.id + '"]').forEach(function (b) {
-            b.classList.toggle('active', parseInt(b.dataset.scaleVal, 10) === n);
-          });
+
+        if (labeled) {
+          var num = document.createElement('span');
+          num.className = 'scale-btn-num';
+          num.textContent = n;
+          btn.appendChild(num);
+          var txt = document.createElement('span');
+          txt.className = 'scale-btn-label';
+          txt.textContent = q.labels[n - 1];
+          btn.appendChild(txt);
+          btn.setAttribute('aria-label', n + ' — ' + q.labels[n - 1]);
+        } else {
+          btn.textContent = n;
+        }
+
+        btn.addEventListener('click', function () { select(n); });
+        btn.addEventListener('keydown', function (e) {
+          var delta = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
+                    : e.key === 'ArrowLeft'  || e.key === 'ArrowUp'   ? -1 : 0;
+          if (!delta) return;
+          e.preventDefault();
+          var next = n + delta;
+          if (next < 1) next = points;
+          if (next > points) next = 1;
+          select(next);
+          var sel = row.querySelector('.scale-btn[data-scale-val="' + next + '"]');
+          if (sel) sel.focus();
         });
         row.appendChild(btn);
       })(i);
     }
     wrap.appendChild(row);
-    if (q.anchors && q.anchors.length === 2) {
+
+    if (!labeled && q.anchors && q.anchors.length === 2) {
       var labels = document.createElement('div');
       labels.className = 'scale-labels';
       var left = document.createElement('span'); left.textContent = q.anchors[0];
@@ -964,6 +1090,8 @@
     }
 
     input.addEventListener('input', function () {
+      touched[q.id] = true;
+      clearSkip(q.id);
       var v = Number(input.value);
       state[q.id] = v;
       sliderFill(input, v, min, max);
@@ -1179,6 +1307,8 @@
   }
 
   function moveRankItem(qId, fromIdx, toIdx) {
+    touched[qId] = true;
+    clearSkip(qId);
     var ord = Array.isArray(state[qId]) ? state[qId].slice() : [];
     if (fromIdx < 0 || fromIdx >= ord.length || toIdx < 0 || toIdx >= ord.length || fromIdx === toIdx) return;
     var moved = ord.splice(fromIdx, 1)[0];
@@ -1189,11 +1319,456 @@
     });
   }
 
+  // ── Skip ──
+  // Every question can be skipped, including required ones: "required" is advisory
+  // here, because a blocked user abandons the form and the agent learns nothing.
+  // A recorded skip is positive information — it says the question missed.
+  function clearSkip(qId) {
+    if (skipped[qId]) {
+      delete skipped[qId];
+      document.querySelectorAll('.question[data-question-id="' + qId + '"]').forEach(function (el) {
+        el.classList.remove('is-skipped');
+        var b = el.querySelector('.skip-btn');
+        if (b) { b.textContent = 'Skip'; b.setAttribute('aria-pressed', 'false'); }
+        var r = el.querySelector('.skip-reasons');
+        if (r) r.classList.remove('visible');
+      });
+      refreshTOC();
+    }
+  }
+
+  function setSkip(qId, reason) {
+    skipped[qId] = { reason: reason || '' };
+    document.querySelectorAll('.question[data-question-id="' + qId + '"]').forEach(function (el) {
+      el.classList.add('is-skipped');
+      var b = el.querySelector('.skip-btn');
+      if (b) { b.textContent = 'Skipped — undo'; b.setAttribute('aria-pressed', 'true'); }
+      var r = el.querySelector('.skip-reasons');
+      if (r) r.classList.toggle('visible', true);
+      el.querySelectorAll('.skip-reason-btn').forEach(function (rb) {
+        rb.classList.toggle('active', rb.dataset.reason === reason);
+      });
+    });
+    refreshTOC();
+  }
+
+  function buildSkipControl(q) {
+    var wrap = document.createElement('div');
+    wrap.className = 'skip-control';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'skip-btn';
+    btn.textContent = skipped[q.id] ? 'Skipped — undo' : 'Skip';
+    btn.setAttribute('aria-pressed', skipped[q.id] ? 'true' : 'false');
+    btn.addEventListener('click', function () {
+      if (skipped[q.id]) clearSkip(q.id);
+      else setSkip(q.id, '');
+    });
+    wrap.appendChild(btn);
+
+    var reasons = document.createElement('div');
+    reasons.className = 'skip-reasons' + (skipped[q.id] ? ' visible' : '');
+    var lbl = document.createElement('span');
+    lbl.className = 'skip-reasons-label';
+    lbl.textContent = 'Why?';
+    reasons.appendChild(lbl);
+    SKIP_REASONS.forEach(function (r) {
+      var rb = document.createElement('button');
+      rb.type = 'button';
+      rb.className = 'skip-reason-btn' + (skipped[q.id] && skipped[q.id].reason === r.value ? ' active' : '');
+      rb.textContent = r.label;
+      rb.dataset.reason = r.value;
+      rb.addEventListener('click', function () { setSkip(q.id, r.value); });
+      reasons.appendChild(rb);
+    });
+    wrap.appendChild(reasons);
+    return wrap;
+  }
+
+  // ── Per-question flag ──
+  // Granular counterpart to the form-level critique: "this specific question is
+  // wrong", as distinct from "this whole form is pitched wrong".
+  function buildFlagControl(q) {
+    var wrap = document.createElement('div');
+    wrap.className = 'flag-control';
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'flag-btn';
+    btn.textContent = '⚑ Flag this question';
+    btn.setAttribute('aria-expanded', 'false');
+
+    var panel = document.createElement('div');
+    panel.className = 'flag-panel';
+
+    btn.addEventListener('click', function () {
+      var open = panel.classList.toggle('visible');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    var kinds = document.createElement('div');
+    kinds.className = 'flag-kinds';
+    CRITIQUE_KINDS.forEach(function (k) {
+      var kb = document.createElement('button');
+      kb.type = 'button';
+      kb.className = 'flag-kind-btn';
+      kb.textContent = k.label;
+      kb.dataset.kind = k.value;
+      kb.addEventListener('click', function () {
+        var cur = flags[q.id] || {};
+        var on = cur.kind === k.value;
+        flags[q.id] = { kind: on ? '' : k.value, note: cur.note || '' };
+        if (!flags[q.id].kind && !flags[q.id].note) delete flags[q.id];
+        panel.querySelectorAll('.flag-kind-btn').forEach(function (b) {
+          b.classList.toggle('active', !on && b.dataset.kind === k.value);
+        });
+        document.querySelectorAll('.question[data-question-id="' + q.id + '"]').forEach(function (el) {
+          el.classList.toggle('is-flagged', !!flags[q.id]);
+        });
+        refreshTOC();
+      });
+      kinds.appendChild(kb);
+    });
+    panel.appendChild(kinds);
+
+    var note = document.createElement('textarea');
+    note.className = 'flag-note';
+    note.rows = 2;
+    note.placeholder = 'What should we have asked instead? (optional)';
+    note.addEventListener('input', function () {
+      var cur = flags[q.id] || { kind: '' };
+      cur.note = note.value;
+      flags[q.id] = cur;
+      if (!cur.kind && !cur.note) delete flags[q.id];
+      document.querySelectorAll('.question[data-question-id="' + q.id + '"]').forEach(function (el) {
+        el.classList.toggle('is-flagged', !!flags[q.id]);
+      });
+      refreshTOC();
+    });
+    panel.appendChild(note);
+
+    wrap.appendChild(btn);
+    wrap.appendChild(panel);
+    return wrap;
+  }
+
+  // ── Question status (drives the TOC markers) ──
+  // Slider and priority-rank cannot represent "empty" (a range input always has a
+  // thumb; a list always has an order), so they carry a default. That default must
+  // NOT count as an answer — an untouched control the user never looked at would
+  // otherwise read as endorsed, which is the bias R1 removes everywhere else.
+  // touched[] records real interaction instead.
+  var touched = {};
+  window.touched = touched;
+
+  function questionStatus(q) {
+    if (skipped[q.id]) return 'skipped';
+    if (q.type === 'slider' || q.type === 'priority-rank') {
+      return touched[q.id] ? 'answered' : 'unanswered';
+    }
+    var v = state[q.id];
+    var answered = Array.isArray(v) ? v.length > 0 : (v !== null && v !== undefined && v !== '');
+    return answered ? 'answered' : 'unanswered';
+  }
+
+  var STATUS_MARK = { answered: '✓', skipped: '⊘', unanswered: '○' };
+
+  // ── Sidebar table of contents ──
+  // Persistent hierarchical nav: sections -> questions, with per-question status.
+  // Collapsible, and hidden below 1100px so the mobile layout is unaffected.
+  function buildSidebar(spec) {
+    var aside = document.createElement('aside');
+    aside.className = 'if-sidebar';
+    aside.id = 'if-sidebar';
+    aside.setAttribute('aria-label', 'Form contents');
+
+    var nav = document.createElement('nav');
+    nav.className = 'toc';
+    nav.id = 'toc-body';
+    aside.appendChild(nav);
+
+    var footer = document.createElement('div');
+    footer.className = 'toc-footer';
+
+    var critiqueBtn = document.createElement('button');
+    critiqueBtn.type = 'button';
+    critiqueBtn.className = 'toc-critique-btn';
+    critiqueBtn.id = 'toc-critique-btn';
+    critiqueBtn.textContent = '⚑ Wrong questions?';
+    critiqueBtn.addEventListener('click', openCritique);
+    footer.appendChild(critiqueBtn);
+
+    var reviewBtn = document.createElement('button');
+    reviewBtn.type = 'button';
+    reviewBtn.className = 'toc-review-btn';
+    reviewBtn.textContent = '▸ Review & export';
+    reviewBtn.addEventListener('click', function () { gotoStep(TOTAL_Q); });
+    footer.appendChild(reviewBtn);
+
+    aside.appendChild(footer);
+    return aside;
+  }
+
+  function refreshTOC() {
+    var nav = document.getElementById('toc-body');
+    if (!nav || !SPEC) return;
+    while (nav.firstChild) nav.removeChild(nav.firstChild);
+
+    var stepIdx = 0;
+    SPEC.sections.forEach(function (sec) {
+      var inputs = sec.questions.filter(function (q) {
+        return q.type !== 'narrative-card' && q.type !== 'embedded-media';
+      });
+      var done = inputs.filter(function (q) { return questionStatus(q) !== 'unanswered'; }).length;
+
+      var group = document.createElement('div');
+      group.className = 'toc-group';
+
+      var head = document.createElement('div');
+      head.className = 'toc-section';
+      var nameEl = document.createElement('span');
+      nameEl.className = 'toc-section-name';
+      nameEl.textContent = sec.name;
+      head.appendChild(nameEl);
+      var count = document.createElement('span');
+      count.className = 'toc-count';
+      count.textContent = done + '/' + inputs.length;
+      head.appendChild(count);
+      group.appendChild(head);
+
+      sec.questions.forEach(function (q) {
+        stepIdx++;
+        var myStep = stepIdx;
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+        var status = questionStatus(q);
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'toc-item is-' + status
+          + (myStep === currentQ ? ' current' : '')
+          + (flags[q.id] ? ' is-flagged' : '');
+        if (myStep === currentQ) item.setAttribute('aria-current', 'step');
+
+        var mark = document.createElement('span');
+        mark.className = 'toc-mark';
+        mark.textContent = STATUS_MARK[status];
+        mark.setAttribute('aria-hidden', 'true');
+        item.appendChild(mark);
+
+        var txt = document.createElement('span');
+        txt.className = 'toc-item-label';
+        txt.textContent = q.tocLabel || q.label || q.id;
+        item.appendChild(txt);
+
+        if (flags[q.id]) {
+          var fl = document.createElement('span');
+          fl.className = 'toc-flag';
+          fl.textContent = '⚑';
+          item.appendChild(fl);
+        }
+
+        var srStatus = document.createElement('span');
+        srStatus.className = 'sr-only';
+        srStatus.textContent = ' — ' + status;
+        item.appendChild(srStatus);
+
+        item.addEventListener('click', function () { gotoStep(myStep); });
+        group.appendChild(item);
+      });
+      nav.appendChild(group);
+    });
+  }
+
+  // Jump to a wizard step from the TOC. In grouped view, scroll to the question.
+  function gotoStep(n) {
+    var groupedVisible = document.getElementById('layout-grouped').style.display !== 'none';
+    if (groupedVisible) {
+      var step = STEPS[n - 1];
+      if (step) {
+        var target = document.querySelector('#layout-grouped .question[data-question-id="'
+          + step.question.id + '"]');
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('flash');
+          setTimeout(function () { target.classList.remove('flash'); }, 900);
+        }
+      }
+      currentQ = n;
+      refreshTOC();
+      return;
+    }
+    if (n < 1 || n > TOTAL_Q) return;
+    var prev = document.getElementById('q' + currentQ);
+    if (prev) prev.classList.remove('active', 'fade-in');
+    var nxt = document.getElementById('q' + n);
+    if (nxt) nxt.classList.add('active');
+    currentQ = n;
+    if (n === TOTAL_Q) {
+      buildReview('wizard-review-content');
+      buildExport('export-text');
+    }
+    updateProgress();
+    refreshTOC();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // ── Form-level critique panel ──
+  // The "this form is asking the wrong things" escape hatch, reachable from every
+  // question rather than only at the end — a user must not have to complete a
+  // mis-targeted form in order to report that it is mis-targeted.
+  function openCritique() {
+    var dlg = document.getElementById('critique-panel');
+    if (dlg) { dlg.classList.add('visible'); var f = dlg.querySelector('.critique-note'); if (f) f.focus(); }
+  }
+  function closeCritique() {
+    var dlg = document.getElementById('critique-panel');
+    if (dlg) dlg.classList.remove('visible');
+  }
+
+  function buildCritiquePanel() {
+    var overlay = document.createElement('div');
+    overlay.className = 'critique-overlay';
+    overlay.id = 'critique-panel';
+
+    var panel = document.createElement('div');
+    panel.className = 'critique-card';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'critique-title');
+
+    var h = document.createElement('h2');
+    h.id = 'critique-title';
+    h.className = 'critique-title';
+    h.textContent = 'Is this form asking the right things?';
+    panel.appendChild(h);
+
+    var sub = document.createElement('p');
+    sub.className = 'critique-sub';
+    sub.textContent = 'Tell us what is off. This goes back to the agent as a signal to '
+      + 'rebuild the form — you do not have to finish it first.';
+    panel.appendChild(sub);
+
+    formCritique.kinds = formCritique.kinds || [];
+    var kinds = document.createElement('div');
+    kinds.className = 'critique-kinds';
+    CRITIQUE_KINDS.forEach(function (k) {
+      var kb = document.createElement('button');
+      kb.type = 'button';
+      kb.className = 'critique-kind-btn';
+      kb.textContent = k.label;
+      kb.setAttribute('aria-pressed', 'false');
+      kb.addEventListener('click', function () {
+        var i = formCritique.kinds.indexOf(k.value);
+        if (i >= 0) formCritique.kinds.splice(i, 1);
+        else formCritique.kinds.push(k.value);
+        var on = formCritique.kinds.indexOf(k.value) >= 0;
+        kb.classList.toggle('active', on);
+        kb.setAttribute('aria-pressed', on ? 'true' : 'false');
+        markCritiqueActive();
+      });
+      kinds.appendChild(kb);
+    });
+    panel.appendChild(kinds);
+
+    var note = document.createElement('textarea');
+    note.className = 'critique-note';
+    note.rows = 5;
+    note.placeholder = 'What should we be asking instead? What level is right?';
+    note.value = formCritique.note || '';
+    note.addEventListener('input', function () {
+      formCritique.note = note.value;
+      markCritiqueActive();
+    });
+    panel.appendChild(note);
+
+    var actions = document.createElement('div');
+    actions.className = 'critique-actions';
+    var done = document.createElement('button');
+    done.type = 'button';
+    done.className = 'btn btn-primary';
+    done.textContent = 'Save feedback';
+    done.addEventListener('click', closeCritique);
+    actions.appendChild(done);
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn btn-ghost';
+    cancel.textContent = 'Close';
+    cancel.addEventListener('click', closeCritique);
+    actions.appendChild(cancel);
+    panel.appendChild(actions);
+
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCritique(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeCritique();
+    });
+    return overlay;
+  }
+
+  function markCritiqueActive() {
+    var has = (formCritique.kinds && formCritique.kinds.length) || formCritique.note;
+    var btn = document.getElementById('toc-critique-btn');
+    if (btn) btn.classList.toggle('active', !!has);
+  }
+
   function buildSectionLabel(text) {
     var lbl = document.createElement('div');
     lbl.className = 'wizard-section-label';
     lbl.textContent = text;
     return lbl;
+  }
+
+  // ── Cited materials ──
+  // Renders q.sources / SPEC.sources as real links that open in a new tab, so a
+  // reviewer never loses form state to follow a citation. rel="noopener noreferrer"
+  // is mandatory with target=_blank. Only http(s) and file URLs are linked;
+  // anything else renders as plain text rather than becoming a javascript: vector.
+  function safeHref(url) {
+    if (typeof url !== 'string') return null;
+    var u = url.trim();
+    return /^(https?:|file:|\.{0,2}\/)/i.test(u) ? u : null;
+  }
+
+  function buildSources(list, label) {
+    var items = (list || []).filter(Boolean);
+    if (!items.length) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'sources';
+    var head = document.createElement('div');
+    head.className = 'sources-label';
+    head.textContent = label || 'Reference material';
+    wrap.appendChild(head);
+    var ul = document.createElement('ul');
+    ul.className = 'sources-list';
+    items.forEach(function (src) {
+      var obj = typeof src === 'string' ? { url: src } : (src || {});
+      var href = safeHref(obj.url);
+      var li = document.createElement('li');
+      if (href) {
+        var a = document.createElement('a');
+        a.className = 'source-link';
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = obj.label || obj.title || obj.url;
+        var sr = document.createElement('span');
+        sr.className = 'sr-only';
+        sr.textContent = ' (opens in a new tab)';
+        a.appendChild(sr);
+        li.appendChild(a);
+      } else {
+        li.textContent = obj.label || obj.title || String(obj.url || src);
+      }
+      if (obj.note) {
+        var n = document.createElement('span');
+        n.className = 'source-note';
+        n.textContent = ' — ' + obj.note;
+        li.appendChild(n);
+      }
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    return wrap;
   }
 
   function buildInferenceBox(text) {
@@ -1243,6 +1818,11 @@
     var box = document.createElement('div');
     box.className = 'export-box';
     box.id = textId;
+    // The box scrolls (max-height 300px), so it needs to be keyboard-reachable
+    // and announced; otherwise keyboard users cannot read past the fold.
+    box.tabIndex = 0;
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', 'Export payload');
     wrap.appendChild(box);
     var actions = document.createElement('div');
     actions.className = 'export-actions';
@@ -1264,21 +1844,24 @@
 
   function initStateFromQuestion(q) {
     if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+    // Closed-choice types start EMPTY regardless of spec defaults (R1). Pre-selecting
+    // an answer anchors the respondent and makes an unreviewed default look endorsed.
+    // options[].selected and default are deliberately ignored for radio/checkbox/
+    // scale/segmented; authors surface a hypothesis via badge or inferenceBox instead.
     if (q.type === 'radio') {
-      var sel = (q.options || []).find(function (o) { return o.selected; });
-      state[q.id] = sel ? sel.value : null;
+      state[q.id] = null;
     } else if (q.type === 'checkbox') {
-      var picks = (q.options || []).filter(function (o) { return o.selected; }).map(function (o) { return o.value; });
-      state[q.id] = picks;
-      checkboxSets[q.id] = new Set(picks);
+      state[q.id] = [];
+      checkboxSets[q.id] = new Set();
     } else if (q.type === 'scale') {
-      state[q.id] = q.default || null;
+      state[q.id] = null;
     } else if (q.type === 'file-upload') {
       state[q.id] = q.default || '';
     } else if (q.type === 'segmented') {
-      var segSel = (q.options || []).find(function (o) { return o.selected; });
-      state[q.id] = q.default || (segSel ? segSel.value : null);
+      state[q.id] = null;
     } else if (q.type === 'slider') {
+      // Sliders keep their default: an unset range input still renders a thumb
+      // somewhere, so there is no "empty" state to represent honestly.
       var slMin = q.min != null ? Number(q.min) : 0;
       state[q.id] = q.default != null ? Number(q.default) : slMin;
     } else if (q.type === 'priority-rank') {
@@ -1313,6 +1896,7 @@
       buildExport('export-text');
     }
     updateProgress();
+    refreshTOC();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -1327,34 +1911,38 @@
       buildReview('grouped-review-content');
       buildExport('export-text-grouped');
     }
+    refreshTOC();
   }
 
-  // ── Grouped section nav ──
-  function groupedNav(idx, el) {
-    document.querySelectorAll('.grouped-section').forEach(function (s) { s.classList.remove('active'); });
-    document.querySelectorAll('.section-tab').forEach(function (t) { t.classList.remove('active'); });
+  // ── Grouped section nav (all sections are always visible; this scrolls) ──
+  function groupedNav(idx) {
     var sec = document.getElementById('gs' + idx);
-    if (sec) sec.classList.add('active');
-    if (el) el.classList.add('active');
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (sec && sec.querySelector('.export-box')) {
       buildReview('grouped-review-content');
       buildExport('export-text-grouped');
     }
   }
 
-  // ── Progress bar ──
+  // ── Position indicator ──
+  // Deliberately NOT a completion percentage. A meta-analysis of 32 experiments
+  // (Villar, Callegaro & Yang 2013) found constant progress indicators give no
+  // completion benefit, and slow-to-fast ones raise drop-off odds ×1.56. A plain
+  // section-position statement orients the user without implying a rate.
   function updateProgress() {
-    var steps = document.getElementById('progress-steps');
-    if (!steps) return;
-    while (steps.firstChild) steps.removeChild(steps.firstChild);
-    for (var i = 0; i < TOTAL_Q; i++) {
-      var d = document.createElement('div');
-      d.className = 'progress-step' + (i < currentQ - 1 ? ' complete' : i === currentQ - 1 ? ' active' : '');
-      steps.appendChild(d);
+    var label = document.getElementById('progress-section-label');
+    var pct = document.getElementById('progress-pct');
+    if (!label || !SPEC) return;
+
+    if (currentQ === TOTAL_Q) {
+      label.textContent = 'Review & export';
+      if (pct) pct.textContent = '';
+      return;
     }
-    document.getElementById('progress-section-label').textContent = SECTION_NAMES[currentQ - 1] || 'Review';
-    var pct = currentQ === TOTAL_Q ? 100 : Math.round(((currentQ - 1) / TOTAL_Q) * 100);
-    document.getElementById('progress-pct').textContent = pct + '% complete';
+    var step = STEPS[currentQ - 1];
+    var secIdx = step ? step.sectionIdx : 0;
+    label.textContent = step ? step.section.name : '';
+    if (pct) pct.textContent = 'Section ' + (secIdx + 1) + ' of ' + SPEC.sections.length;
   }
 
   // ── Default review/export builders (spec-driven) ──
@@ -1362,13 +1950,22 @@
     var c = document.getElementById(containerId);
     if (!c || !SPEC) return;
     while (c.firstChild) c.removeChild(c.firstChild);
+    var stepIdx = 0;
     SPEC.sections.forEach(function (sec) {
       sec.questions.forEach(function (q) {
+        stepIdx++;
         if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
-        reviewRow(c, q.label || q.id, displayValue(q));
+        var shown = skipped[q.id] ? '(skipped)' : displayValue(q);
+        // Jump-to-edit: the review list is only useful if it affords correction.
+        reviewRow(c, q.label || q.id, shown, stepIdx);
         var commKey = q.id + '_commentary';
         if (shouldAddCommentary(q) && state[commKey]) {
           reviewRow(c, '↳ commentary', state[commKey]);
+        }
+        if (flags[q.id]) {
+          var fk = CRITIQUE_KINDS.find(function (cc) { return cc.value === flags[q.id].kind; });
+          reviewRow(c, '⚑ flagged', (fk ? fk.label : 'flagged')
+            + (flags[q.id].note ? ' — ' + flags[q.id].note : ''));
         }
         // Multi-branch: if selected option has a branch, emit it
         if (q.type === 'radio' && state[q.id]) {
@@ -1385,15 +1982,76 @@
     var el = document.getElementById(boxId);
     if (!el || !SPEC) return;
     var lines = ['=== ' + (SPEC.exportTitle || 'INTAKE EXPORT') + ' ===', ''];
+    // Pad to the longest key so values stay column-aligned even with long ids
+    // (a fixed 16 made long keys collide with their own value).
     var keyWidth = 16;
     SPEC.sections.forEach(function (sec) {
       sec.questions.forEach(function (q) {
         if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+        var k = (q.exportKey || q.id).toUpperCase();
+        keyWidth = Math.max(keyWidth, k.length + 7);
+      });
+    });
+
+    // Reading instructions for the consuming agent. The form cannot enforce how
+    // its output is weighted, so it states the intended weighting explicitly.
+    var skipCount = Object.keys(skipped).length;
+    var flagCount = Object.keys(flags).length;
+    var hasCritique = (formCritique.kinds && formCritique.kinds.length) || formCritique.note;
+
+    lines.push('--- How to read this ---');
+    lines.push('1. Free-text NOTE lines carry more signal than the selections they');
+    lines.push('   annotate. Where a note and a selection conflict, trust the note.');
+    lines.push('2. SKIPPED is information, not absence. It means the question missed —');
+    lines.push('   do not re-ask it verbatim. Check the reason.');
+    lines.push('3. FLAGGED questions were judged wrong by the respondent.');
+    if (hasCritique) {
+      lines.push('4. FORM_CRITIQUE is present. The respondent says this form asked the');
+      lines.push('   wrong things. Do NOT treat it as one more answer: REGENERATE the form');
+      lines.push('   at the corrected altitude, or re-scope, before acting on anything below.');
+    }
+    lines.push('');
+
+    if (hasCritique) {
+      lines.push('--- FORM_CRITIQUE (read first) ---');
+      if (formCritique.kinds && formCritique.kinds.length) {
+        lines.push(padRight('PROBLEM:', keyWidth) + formCritique.kinds.map(function (k) {
+          var m = CRITIQUE_KINDS.find(function (c) { return c.value === k; });
+          return m ? m.label : k;
+        }).join(' | '));
+      }
+      if (formCritique.note) {
+        lines.push(padRight('DETAIL:', keyWidth) + formCritique.note);
+      }
+      lines.push('');
+    }
+
+    SPEC.sections.forEach(function (sec) {
+      sec.questions.forEach(function (q) {
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
         var keyBase = (q.exportKey || q.id).toUpperCase();
-        lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true));
+        if (skipped[q.id]) {
+          var reason = skipped[q.id].reason;
+          var rLabel = SKIP_REASONS.find(function (r) { return r.value === reason; });
+          lines.push(padRight(keyBase + ':', keyWidth) + 'SKIPPED'
+            + (rLabel ? ' (' + rLabel.label + ')' : ''));
+        } else if ((q.type === 'slider' || q.type === 'priority-rank') && !touched[q.id]) {
+          // Untouched default: report the value but mark it unconfirmed, so the
+          // agent does not read an initial position as a deliberate choice.
+          lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true)
+            + '   [UNTOUCHED DEFAULT — not confirmed by respondent]');
+        } else {
+          lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true));
+        }
         var commKey = q.id + '_commentary';
         if (shouldAddCommentary(q) && state[commKey]) {
           lines.push(padRight(keyBase + '_NOTE:', keyWidth) + state[commKey]);
+        }
+        if (flags[q.id]) {
+          var fk = CRITIQUE_KINDS.find(function (c) { return c.value === flags[q.id].kind; });
+          lines.push(padRight(keyBase + '_FLAG:', keyWidth)
+            + (fk ? fk.label : 'flagged')
+            + (flags[q.id].note ? ' — ' + flags[q.id].note : ''));
         }
         // Multi-branch: if selected option has a branch, emit it
         if (q.type === 'radio' && state[q.id]) {
@@ -1414,6 +2072,12 @@
       Object.keys(SPEC.routing).forEach(function (k) {
         lines.push(padRight(k, 22) + '-> ' + SPEC.routing[k]);
       });
+    }
+    if (skipCount || flagCount) {
+      lines.push('', '--- Response quality ---');
+      if (skipCount) lines.push(skipCount + ' question(s) skipped.');
+      if (flagCount) lines.push(flagCount + ' question(s) flagged as mis-targeted.');
+      lines.push('Treat these as evidence about the form, not only about the respondent.');
     }
     el.textContent = lines.join('\n');
   }
@@ -1476,13 +2140,24 @@
   }
 
   // ── Review row helper (XSS-safe; also exported) ──
-  function reviewRow(container, q, a) {
-    var isEmpty = !a || a === '(not answered)' || a === '(none)';
+  function reviewRow(container, q, a, jumpStep) {
+    var isEmpty = !a || a === '(not answered)' || a === '(none)' || a === '(skipped)';
     var item = document.createElement('div'); item.className = 'review-item';
     var qEl = document.createElement('div'); qEl.className = 'review-q'; qEl.textContent = q;
+    item.appendChild(qEl);
     var aEl = document.createElement('div'); aEl.className = 'review-a' + (isEmpty ? ' empty' : '');
     aEl.textContent = Array.isArray(a) ? (a.length ? a.join(', ') : '(not answered)') : (a || '(not answered)');
-    item.appendChild(qEl); item.appendChild(aEl); container.appendChild(item);
+    item.appendChild(aEl);
+    if (jumpStep) {
+      var chg = document.createElement('button');
+      chg.type = 'button';
+      chg.className = 'review-change';
+      chg.textContent = 'Change';
+      chg.setAttribute('aria-label', 'Change answer: ' + q);
+      chg.addEventListener('click', function () { gotoStep(jumpStep); });
+      item.appendChild(chg);
+    }
+    container.appendChild(item);
   }
 
   // ── Clipboard (file:// safe) ──
@@ -1511,4 +2186,7 @@
   window.reviewRow = reviewRow;
   window.buildReview = buildReview;
   window.buildExport = buildExport;
+  window.gotoStep = gotoStep;
+  window.openCritique = openCritique;
+  window.formCritique = formCritique;
 })();

@@ -19,7 +19,6 @@
               "value": "a",
               "label": "Option A",
               "description": "A clear first choice with a description.",
-              "selected": true,
               "badge": "Likely match — based on prior context"
             },
             {
@@ -37,7 +36,8 @@
               "label": "Not sure",
               "unsure": true
             }
-          ]
+          ],
+          "kind": "factual"
         }
       ]
     },
@@ -53,8 +53,7 @@
             {
               "value": "time",
               "label": "Time",
-              "description": "There is an external deadline.",
-              "selected": true
+              "description": "There is an external deadline."
             },
             {
               "value": "money",
@@ -115,11 +114,14 @@
           "type": "scale",
           "label": "How much capital is at risk?",
           "hint": "Five-button scale. Trade-off anchors, not good/bad.",
-          "anchors": [
-            "Trivial",
-            "Bet-the-company"
-          ],
-          "default": 2
+          "default": 2,
+          "labels": [
+            "None",
+            "Minor",
+            "Moderate",
+            "Major",
+            "Existential"
+          ]
         }
       ]
     },
@@ -312,7 +314,8 @@
               "label": "Not sure yet",
               "unsure": true
             }
-          ]
+          ],
+          "kind": "factual"
         }
       ]
     }
@@ -321,5 +324,16 @@
   "routing": {},
   "theme": {
     "preset": "default"
-  }
+  },
+  "sources": [
+    {
+      "url": "https://design-system.service.gov.uk/patterns/question-pages/",
+      "label": "GOV.UK question pages",
+      "note": "one thing per page"
+    },
+    {
+      "url": "https://www.w3.org/WAI/ARIA/apg/patterns/radio/",
+      "label": "WAI-ARIA radio group pattern"
+    }
+  ]
 }

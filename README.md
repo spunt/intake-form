@@ -2,7 +2,7 @@
 
 **Turn an underspecified request into a clean, native-feeling HTML form by filling in one JSON spec — no form HTML by hand, no backend, no build step.** The reviewer fills it out in the browser and clicks **Copy for Claude**; you get back a structured, agent-ready payload.
 
-![A generated intake form: an inference box, a pre-selected option with a "likely match" badge, a "Not sure" escape hatch, an optional commentary field, and a progress stepper](docs/screenshot.png)
+![A generated intake form: a sidebar table of contents with per-question status, an inference box, an unselected option carrying a "likely match" badge, a "Not sure" escape hatch, a commentary field, and Skip and Flag controls](docs/screenshot.png)
 
 <sub>**Try it:** open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) in any browser — one self-contained file showing every question type.</sub>
 
@@ -29,18 +29,36 @@ The reviewer clicks **Copy for Claude** and the renderer auto-formats every answ
 ```
 === INTAKE EXPORT ===
 
-REVERSIBILITY:  Easily reversible
-CONSTRAINTS:    Time | Compliance
-EFFORT:         30 — Trivial
-FORMAT:         Report
-REPORT_PAGES:   10
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+
+REVERSIBILITY:      Easily reversible
+REVERSIBILITY_NOTE: reversible on paper, but the migration is one-way
+CONSTRAINTS:        Time | Compliance
+BUDGET:             SKIPPED (Doesn't apply)
+EFFORT:             30   [UNTOUCHED DEFAULT — not confirmed by respondent]
+FORMAT:             Report
+FORMAT_FLAG:        Too specific / in the weeds — ask what the decision is first
+REPORT_PAGES:       10
 
 --- Context already known ---
 User: a senior engineer on a small product team.
 
 --- Routing suggestion ---
 ask.reversibility     -> route to a structured decision workflow ...
+
+--- Response quality ---
+1 question(s) skipped.
+1 question(s) flagged as mis-targeted.
+Treat these as evidence about the form, not only about the respondent.
 ```
+
+When the reviewer says the form itself is wrong, a `FORM_CRITIQUE` block leads the
+export and tells the consuming agent to regenerate rather than proceed.
 
 ## Quick start
 
@@ -60,7 +78,11 @@ There is no install step for the form itself — it's a template plus a renderer
 ## How it works
 
 - **One spec, two views.** `ifbase.js` reads a single `<script id="form-spec">` block and builds *both* the wizard and the grouped layout from it, keeping state in sync. There is no second copy of the questions to drift out of sync — the structural fix for the classic "duplicate the DOM and one copy goes empty" bug.
-- **Native controls.** Real `<input>`/`<textarea>`/range elements, keyboard-navigable, with an inference box, pre-selected best-guess options, a required "Not sure" escape hatch, and an optional commentary field on every closed-choice question.
+- **Native controls.** Real `<input>`/`<textarea>`/range elements, keyboard-navigable, with an inference box, a commentary field on every closed-choice question, and Skip + Flag controls on every question.
+- **Nothing is pre-selected.** A guess the user waves through would be indistinguishable from an answer they chose, so the agent's hypothesis appears as a visible badge to accept or reject — never as a checked box.
+- **The form can tell you it is wrong.** Any question can be skipped (with a reason) or flagged, and a form-level critique panel reachable from every question exports a `FORM_CRITIQUE` block telling the consuming agent to regenerate rather than proceed.
+- **Sidebar navigation.** A persistent table of contents lists every section and question with live status — answered, skipped, unanswered, flagged — and jumps to any of them.
+- **Cited material stays reachable.** Attach `sources` to the form or any question; they render as links that open in a new tab, so following a citation never discards the reviewer's answers.
 - **Themeable from the spec.** A single `--if-*` OKLCH token layer drives color, type, motion, and density. Set a `theme` block (`preset`, `hue`, `palette`, …) in the spec; no per-form CSS. Presets ship for `default`, `editorial`, and `terminal`.
 - **Client-side only.** Nothing is sent anywhere. Answers live in the page until the user clicks Copy for Claude or exports.
 
@@ -71,6 +93,8 @@ There is no install step for the form itself — it's a template plus a renderer
 ## Quality
 
 The renderer is backed by a verification harness in [`tools/`](tools/): `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)) and `axe-audit.mjs` (programmatic accessibility audit on both views). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+
+Current state: 12/12 specs render with zero console errors, and zero axe violations across both layouts. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 
 ```bash
 cd tools && npm install

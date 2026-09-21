@@ -101,6 +101,8 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
   "heading":     "string — main h1",
   "subhead":     "string — paragraph under h1",
   "exportTitle": "string — header row in the copy-for-Claude block. Default 'INTAKE EXPORT'",
+  "sources":     [ { "url": "https://…", "label": "…", "note": "…" } ],  // optional; form-level references
+  "sourcesLabel": "string — heading above the sources list. Default 'Background material'",
 
   "theme": {
     "preset":   "default | editorial | terminal | kraft | studio",   // optional; default = 'default'
@@ -133,7 +135,10 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
           "type":      "radio | checkbox | text | textarea | scale",
           "label":     "string — the question",
           "hint":      "string (optional) — sub-label",
-          "required":  true,
+          "required":  true,              // advisory only — every question is skippable
+          "kind":      "factual | judgment",  // radio: controls the auto "Not sure" option
+          "tocLabel":  "string (optional) — shorter label for the sidebar TOC",
+          "sources":   [ { "url": "https://…", "label": "…", "note": "…" } ],  // optional; open in new tab
           "exportKey": "OPTIONAL_OVERRIDE — defaults to id.toUpperCase()",
           "inferenceBox": "string (optional) — shown as 'What I'm seeing: …' above the question",
 
@@ -144,8 +149,8 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
               "label":       "Visible label",
               "description": "string (optional) — sub-label under the option",
               "badge":       "string (optional) — e.g. 'Likely match — reason'",
-              "selected":    true,        // pre-select
-              "unsure":      true,        // dashed border + italics; reserved for the 'Not sure' option
+              "selected":    true,        // IGNORED at runtime — see § No default selections
+              "unsure":       true,        // dashed border + italics; the escape-hatch option
               "reveals":     true         // selecting this option reveals the conditional follow-up
             }
           ],
@@ -155,9 +160,9 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
           "maxLength":   500,             // textarea only — adds a char counter
           "default":     "string",        // optional initial value
 
-          // For scale:
-          "anchors": ["Left trade-off", "Right trade-off"],
-          "default": 3,
+          // For scale (5 points; nothing pre-selected):
+          "labels":  ["Wide open", "Leaning", "Mostly set", "Firm", "Locked"],  // preferred
+          "anchors": ["Left trade-off", "Right trade-off"],                      // endpoint-only fallback
 
           // For narrative-card:
           // "title": "string"    // bold headline
@@ -257,18 +262,188 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
 }
 ```
 
+## Writing the questions
+
+Default to clarity-first prose. If a `doc-clarity` skill (or equivalent house writing
+standard) is available in the environment, apply it to all question text. The rules below
+are the load-bearing subset, restated so this skill does not depend on that skill existing.
+
+1. **One question per question.** "What's the scope and timeline?" is two questions; the
+   user will answer one and drop the other silently.
+2. **Conditions before instructions.** "If you already have a schema, paste it" — never
+   the reverse.
+3. **One term per concept.** Pick `entitlement` or `subscription` and reuse it. A rotated
+   synonym makes the user wonder whether you mean something different.
+4. **Name the actor.** "Who approves the rollout?" beats "How is approval handled?"
+5. **No stacked hedges.** "It may possibly be worth considering whether…" is noise. Ask.
+6. **Label uncertainty in `inferenceBox`.** Distinguish what you *measured* from what you
+   *inferred* from what you *assumed*: "Your last three services used AWS" (measured)
+   reads differently from "You probably want AWS" (assumed) — and only the first lets the
+   user correct the actual error.
+7. **Expand an unavoidable term of art once, on first use.** Do not simplify away
+   precision for a domain expert.
+
+Keep labels short and put the qualification in `hint`. A question label longer than about
+12 words is usually two questions or one unstated assumption.
+
+## Design rules the renderer enforces
+
+These are not style preferences. The renderer implements them, so a spec that
+violates them is silently corrected rather than honored. Each states its reason,
+because an agent that understands the reason writes better specs.
+
+### No default selections
+
+Radio, checkbox, scale, and segmented questions all start empty. `options[].selected`
+and `default` are **ignored at runtime** for those types.
+
+A pre-selected answer that the user waves through is indistinguishable, in the export,
+from an answer they actively chose. That defeats the purpose of asking. Pre-selection
+also anchors the response toward the pre-selected value.
+
+Surface your hypothesis where the user can *reject* it:
+
+```json
+{ "id": "target", "type": "radio", "kind": "factual",
+  "label": "Which deployment target?",
+  "inferenceBox": "Your last three services deployed to AWS.",
+  "options": [
+    { "value": "aws", "label": "AWS", "badge": "Likely — matches prior services" },
+    { "value": "gcp", "label": "GCP" }
+  ] }
+```
+
+Note that a badge still anchors: it is visible emphasis. That is acceptable — it is
+*stated reasoning*, which the user can disagree with — whereas a checked box is a
+silent claim about what they think.
+
+`slider` and `priority-rank` are the two exceptions, because a range input always has a
+thumb position and a list always has an order. They keep their defaults, but an untouched
+control exports with `[UNTOUCHED DEFAULT — not confirmed by respondent]`.
+
+### Escape hatches: declare `kind`, don't hand-add "Not sure"
+
+Set `"kind"` on every radio:
+
+| `kind` | Renderer adds "Not sure" | Use for |
+|---|---|---|
+| `factual` | yes | Anything the user could genuinely not know — current stack, team size, existing deadline |
+| `judgment` | no | Preferences and trade-offs — the user *has* a view, and an escape hatch invites them to duck it |
+
+Omitting `kind` adds nothing; supply your own `"unsure": true` option if you want one.
+
+Every question is skippable regardless, so no user is ever trapped.
+
+### Every question is skippable
+
+The renderer puts a **Skip** control on every question, including `"required": true`
+ones. `required` is advisory — it marks importance in the UI, and does not block.
+
+A skip is recorded, not silent:
+
+```
+BUDGET:          SKIPPED (Doesn't apply)
+```
+
+Optional one-tap reasons: *Doesn't apply*, *Don't know*, *Prefer not to say*. Treat a
+skip as **information about the question**, not as missing data. Do not re-ask a skipped
+question verbatim in a follow-up form.
+
+### Question altitude beats question count
+
+There is no cap on question count. Length is not what makes a form painful — *altitude*
+is. Question count alone does not reliably predict abandonment; topic and pitch do.
+
+Before including a question, ask: **does the answer change what gets built?**
+
+| Altitude | Example | Include? |
+|---|---|---|
+| Decision-changing | "Batch or streaming?" | Yes |
+| Detail derivable later | "What retry interval?" | No — assume, state in `knownContext` |
+| Below the agent's reach | "Which variable name?" | No |
+| Above the user's knowledge | "What's the p99 target?" when they've never measured | No — or mark `kind: factual` |
+
+When in doubt, ask the higher-altitude question and let commentary carry the detail.
+
+## Meta-feedback: letting the user say the form is wrong
+
+Two channels, both automatic — no spec needed.
+
+1. **Per-question flag** (`⚑ Flag this question`) — categorizes one question as wrong
+   level / too specific / too vague / missing the point / irrelevant, plus a free-text
+   "what should we have asked instead".
+2. **Form-level critique** (`⚑ Wrong questions?` in the sidebar, reachable from every
+   question) — same categories applied to the whole instrument.
+
+This exists because the worst failure of an intake form is being *well-completed and
+wrong*. A user must be able to report a mis-targeted form without first completing it.
+
+When `FORM_CRITIQUE` appears in an export, treat it as the highest-priority content:
+
+```
+--- FORM_CRITIQUE (read first) ---
+PROBLEM:         Wrong level of detail
+DETAIL:          These are all about mechanics, not what we're trying to decide.
+```
+
+**Regenerate the form at the corrected altitude. Do not proceed with the answers as if
+the critique were a side note.**
+
+## Reading the export
+
+The export opens with a `--- How to read this ---` block instructing the consuming agent:
+
+1. **Free-text `_NOTE` lines outweigh the selections they annotate.** Where a note and a
+   selection conflict, trust the note. A selection is the closest available box; the note
+   is what the user actually meant.
+2. **`SKIPPED` is information, not absence.**
+3. **`_FLAG` lines mark questions the user judged wrong.**
+
+A `--- Response quality ---` footer counts skips and flags. High counts are evidence
+about the *form*, not only about the respondent.
+
+## Cited materials
+
+Attach reference links at spec root (`sources`) or on any question (`sources`). They
+render as real links that **open in a new tab**, so following a citation never discards
+form state.
+
+```json
+"sources": [
+  { "url": "https://example.com/spec", "label": "Platform spec", "note": "section 4" },
+  { "url": "./docs/brief.md", "label": "Local brief" }
+]
+```
+
+A bare string works as shorthand for `{ "url": ... }`. Only `http(s):`, `file:`, and
+relative paths are linked; anything else renders as plain text, so a malicious `url`
+cannot become a script vector. Override the heading with `sourcesLabel`.
+
+## Navigation and layout
+
+- **Sidebar TOC** — persistent hierarchical outline (sections → questions) with per-question
+  status: `✓` answered, `⊘` skipped, `○` unanswered, `⚑` flagged. Click any entry to jump.
+  Hidden below 1100px. Override a long label in the TOC with `"tocLabel"`.
+- **Step-by-step / All sections** — "All sections" renders every section in one continuous
+  scroll. (It previously showed one section at a time behind a tab strip, contradicting its
+  own name; the tabs are gone.)
+- **Position, not percentage** — the header shows "Section 2 of 4". Percentage progress
+  indicators show no completion benefit in controlled comparisons, and some designs increase
+  drop-off, so the form does not use one.
+- **Review panel** — every row has a **Change** button that jumps back to that question.
+
 ## Question type rules
 
 Worked example of every type in one spec: `examples/question-type-catalog.json` (rendered: `examples/question-type-catalog.html`).
 
-- **Radio:** include `"unsure": true` on the "Not sure" option (last). Pre-select your best guess (`"selected": true`) and add a `"badge"` explaining why. Always include a "Not sure" escape hatch.
-- **Checkbox:** any number of `"selected": true` options become pre-checked. Don't pre-check anything you'd rather the user actively pick.
+- **Radio:** never pre-select. State your best guess as a `"badge"` or in `inferenceBox` — as visible reasoning the user can reject, not as a checked box. Set `"kind": "factual"` and the renderer adds "Not sure" for you; set `"kind": "judgment"` and it does not (see § Escape hatches).
+- **Checkbox:** nothing is pre-checked. `"selected"` is ignored at runtime.
 - **Text:** single-line. Use for short identifiers / names / "something else" follow-ups.
 - **Textarea:** multi-line. Cap to 2 textareas per form — recognition over recall.
-- **Scale:** 5 buttons. `anchors` are trade-off labels (not good/bad).
+- **Scale:** 5 points, nothing pre-selected. Prefer `"labels": [...]` — one label per point — over endpoint-only `anchors`: fully labeled scales measure more reliably. `anchors` still works for two-ended trade-offs. Implements the APG radio-group pattern (arrow keys move and select). Five is deliberate, though not because five measures better: reliability and validity plateau at about five categories, and 5- and 7-point scales produce equivalent rescaled means. Five is *not worse* and costs the respondent less — which is the whole argument. The known cost is midpoint pile-up, since some respondents want a half-step, so when you need to separate *degrees* of a middle position rather than direction, write the distinction into the five labels instead of adding points.
 - **File-upload:** drag-and-drop zone with click-to-browse fallback. `accept` filters by MIME type. `maxSizeKb` (default 2048) enforces a size cap with an inline error on violation. Export embeds a `[filename | mime | size]` header followed by the base64 data-URL. Review display shows filename and size only (no data-URL). Does not get auto-commentary.
-- **Segmented:** pill-button toggle for 2–5 mutually-exclusive options. Options are `{value, label}` — no description field. Use `default` or `options[].selected` for pre-selection. Does not get auto-commentary (it's a fast-tap choice). Export format: selected label (same as radio).
-- **Slider:** single-handle range. `min`/`max`/`step` default to 0/100/1. `anchors` array is optional — each entry `{at, label}` marks a threshold; the nearest anchor is highlighted as the thumb moves. Export format: numeric value only. Review display: `"42 — Medium"` (nearest anchor appended when anchors defined). Does not get an auto-commentary box.
+- **Segmented:** pill-button toggle for 2–5 mutually-exclusive options. Options are `{value, label}` — no description field. Nothing is pre-selected. Does not get auto-commentary (it's a fast-tap choice). Export format: selected label (same as radio).
+- **Slider (discouraged):** prefer `segmented` or a labeled `scale`. Drag interaction measurably raises item nonresponse, worst on mobile, and distorts the value distribution. An untouched slider exports with an `[UNTOUCHED DEFAULT]` marker because a range input cannot represent "unanswered". Single-handle range. `min`/`max`/`step` default to 0/100/1. `anchors` array is optional — each entry `{at, label}` marks a threshold; the nearest anchor is highlighted as the thumb moves. Export format: numeric value only. Review display: `"42 — Medium"` (nearest anchor appended when anchors defined). Does not get an auto-commentary box.
 - **Priority-rank:** renders a drag-reorderable list. Each `options` entry becomes one row with a grip handle and ↑/↓ buttons. Minimum 2 options required (a single-item list cannot be ranked). `default` sets the initial order as an array of values; omit to use the options array order. Keyboard: ArrowUp/Down on the ↑/↓ buttons also move the item. Export format: `Label 1 > Label 2 > Label 3` (ordered by rank). Commentary is attached by default (users often need to explain their ranking).
 - **Narrative-card:** non-input story beat rendered in the question flow. Has `title`, `body`, and optional `icon` (emoji). Does not appear in review or export. Use to frame sections, provide context, or add emotional punctuation between questions.
 - **Multi-branch:** add `"branch": {<question object>}` to any radio option. When that option is selected, the branch question appears below the radio group (any primitive type). Only one branch is visible at a time. Branch answer exports on its own line keyed by the branch's `id`. Backwards-compatible with existing `reveals`/`conditional` pattern. **Constraints:** radio-only (not checkbox); nested branches (a branch with its own `branch` options) are not supported; branch question `id` must be globally unique within the form.
@@ -338,8 +513,10 @@ If you genuinely need custom export logic, override `window.buildExport(boxId)` 
 - **Hand-writing question HTML.** That's the bug class this skill exists to prevent. If you find yourself writing `<div class="wizard-question">` or `<div class="grouped-section">`, stop — edit the spec instead.
 - **Writing a `buildReview`/`buildExport` function in the form.** The renderer has spec-driven defaults. Only override if you really need to.
 - **Saving to a hardcoded path from another project** — save relative to the invoking project's cwd.
-- **Free text as default** — recognition patterns first; free text is fallback (max 2 per form).
-- **No "Not sure" option on radios** — always required.
+- **Free text as default** — recognition patterns first; free text is the fallback.
+- **Pre-selecting an answer** — `selected`/`default` on closed-choice types is ignored at runtime. Put your hypothesis in a `badge` or `inferenceBox`.
+- **A blanket "Not sure" on every radio** — declare `kind` instead and let the renderer decide.
+- **Padding the form with low-altitude questions** — see § Question altitude.
 - **Asking about assumable gaps** — assume with stated default in `knownContext` instead.
 - **Inlining CSS/JS or modifying the template HTML** — use the skill's files via absolute path.
 - **Editing template.html itself for a one-off form** — the template is canonical. If you need new behavior, change `ifbase.js` once and benefit forever.

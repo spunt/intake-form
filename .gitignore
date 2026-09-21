@@ -15,3 +15,6 @@ tools/.last-render/
 .playwright-mcp/
 .cursor/
 .claude/
+
+# Local research notes — kept out of the public repo (may cite internal sources)
+references/prior-art-*.md

@@ -14,15 +14,16 @@
     <button id="btn-grouped" type="button" onclick="setLayout('grouped')">All sections</button>
   </div>
 </div>
+<div class="if-shell" id="if-shell">
+<div class="if-main">
 <header class="header">
   <h1 id="heading-slot"></h1>
   <p id="subhead-slot"></p>
 </header>
 <div class="progress-bar" id="progress-bar-wrap">
-  <div class="progress-steps" id="progress-steps"></div>
   <div class="progress-label">
     <span class="section-name" id="progress-section-label"></span>
-    <span class="pct" id="progress-pct">0% complete</span>
+    <span class="pct" id="progress-pct"></span>
   </div>
 </div>
 <main class="card fade-in" id="main-card">
@@ -31,6 +32,8 @@
     <div id="layout-grouped"></div>
   </form>
 </main>
+</div>
+</div>
 
 <!--
   ─────────────────────────────────────────────────────────────
@@ -52,12 +55,12 @@
         {
           "id": "example",
           "type": "radio",
+          "kind": "factual",
           "label": "Example question — replace this whole spec block.",
           "required": true,
           "options": [
-            { "value": "yes", "label": "Yes", "selected": true },
-            { "value": "no", "label": "No" },
-            { "value": "unsure", "label": "Not sure", "unsure": true }
+            { "value": "yes", "label": "Yes", "badge": "Likely — state your reasoning here, do not pre-select" },
+            { "value": "no", "label": "No" }
           ]
         }
       ]

@@ -3,6 +3,76 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-09
+
+Response-quality release. The theme: a form should be able to tell you it asked the
+wrong questions, and should never make a guess look like an answer. The behavioral
+changes below cite the survey-methodology and accessibility findings they rest on.
+
+### Breaking
+
+- **Pre-selection removed.** `options[].selected` and `default` are now **ignored at
+  runtime** for `radio`, `checkbox`, `scale`, and `segmented`. A pre-selected answer that
+  the user waves through is indistinguishable in the export from one they chose, which
+  defeats the point of asking. Put the agent's hypothesis in a `badge` or `inferenceBox`
+  instead. `slider` and `priority-rank` keep defaults (they cannot represent "empty") but
+  export an `[UNTOUCHED DEFAULT]` marker until the user interacts.
+- **Section tabs removed.** "All sections" renders every section in one continuous
+  scroll. The old tab strip showed one section at a time despite its name, and wrapped
+  and clipped past roughly seven sections. The sidebar TOC replaces it.
+- **Mandatory "Not sure" replaced by `kind`.** Set `"kind": "factual"` and the renderer
+  injects the escape hatch; `"kind": "judgment"` omits it. Omitting `kind` adds nothing.
+  Rationale: nine experiments (Krosnick et al. 2002) found omitting no-opinion options
+  does not degrade data quality, and they attract satisficing.
+- **Progress percentage replaced** by a plain "Section 2 of 4". A 32-experiment
+  meta-analysis found constant progress indicators give no completion benefit, and
+  slow-to-fast designs raise drop-off odds ×1.56.
+
+### Added
+
+- **Skip on every question**, including `required` ones (`required` is now advisory).
+  Optional one-tap reason: doesn't apply / don't know / prefer not to say. Skips export
+  as `SKIPPED (reason)` — information about the question, not missing data.
+- **Meta-feedback, two channels.** A per-question `⚑ Flag` and a form-level
+  `⚑ Wrong questions?` panel reachable from every question (floating button below
+  1100px). Exports as a `FORM_CRITIQUE` block that instructs the consuming agent to
+  consider regenerating the form rather than proceeding.
+- **Sidebar table of contents** — persistent sections → questions outline with
+  per-question status (`✓` answered, `⊘` skipped, `○` unanswered, `⚑` flagged) and
+  click-to-jump. Hidden below 1100px. `tocLabel` overrides a long label.
+- **Export reading instructions.** Every export opens with a `--- How to read this ---`
+  block stating that free-text notes outweigh the selections they annotate, and closes
+  with a `--- Response quality ---` count of skips and flags.
+- **Cited materials** — `sources` at spec root or on any question, rendered as links that
+  open in a new tab with `rel="noopener noreferrer"`. Only `http(s):`, `file:`, and
+  relative URLs are linked; anything else renders as plain text, so a hostile `url`
+  cannot become a script vector.
+- **Fully labeled scales** — `labels: [...]` gives one label per point, which measures
+  more reliably than endpoint-only `anchors`. `anchors` still works.
+- **Jump-to-edit in review** — every review row has a "Change" button.
+
+### Fixed
+
+- **Scale is now a real radio group.** It rendered five plain `<button>`s with no
+  `role="radio"`, no `aria-checked`, and no keyboard navigation — individually valid, so
+  axe passed them, but not announced as a single-choice group. Now implements the APG
+  rating pattern with roving tabindex and arrow-key selection.
+- **Scrollable export box was keyboard-inaccessible** (serious axe violation, previously
+  masked because the box sat behind an inactive tab). Now focusable with an accessible
+  name.
+- **Export key alignment** broke for ids longer than 16 characters; padding is now
+  computed from the longest key.
+- Commentary textarea is roomier by default — a one-line box signalled "not expected",
+  and commentary is the highest-signal field in the export.
+
+### Changed
+
+- `SKILL.md` gained a writing standard for question text, the question-altitude triage
+  rule (altitude, not count, drives form pain), and documentation for every item above.
+  The "max 2 textareas" cap is gone: question count alone does not reliably predict
+  abandonment.
+- Verified: 11/11 test specs render clean, 0 axe violations across both layouts.
+
 ## [1.0.1] — 2026-06
 
 Documentation/structure refactor — no runtime behavior change.

@@ -8,7 +8,7 @@
     {
       "name": "intake-form",
       "source": "./",
-      "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export."
+      "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export. Nothing is pre-selected, every question can be skipped with a reason, and the reviewer can tell you the form itself asked the wrong questions."
     }
   ]
 }

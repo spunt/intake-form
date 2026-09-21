@@ -1,3 +1,10 @@
 === MEDIA EMBED DEMO ===
 
-VERDICT:        Yes
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+
+VERDICT:        (not answered)
