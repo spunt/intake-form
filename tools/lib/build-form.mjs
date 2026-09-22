@@ -114,6 +114,91 @@ export async function validateTheme(theme) {
   return { ok: errors.length === 0, errors };
 }
 
+const KNOWN_TYPES = new Set([
+  'radio', 'checkbox', 'text', 'textarea', 'scale', 'segmented', 'slider',
+  'priority-rank', 'narrative-card', 'embedded-media', 'file-upload',
+]);
+const OPTION_TYPES = new Set(['radio', 'checkbox', 'segmented']);
+
+// Walk every question in the spec, including branch sub-questions, yielding
+// { question, sectionName, viaBranch }. Order matches render order.
+function* iterQuestions(spec) {
+  const sections = Array.isArray(spec?.sections) ? spec.sections : [];
+  for (const section of sections) {
+    const name = section?.name;
+    const questions = Array.isArray(section?.questions) ? section.questions : [];
+    for (const q of questions) {
+      yield { question: q, sectionName: name, viaBranch: false };
+      const options = Array.isArray(q?.options) ? q.options : [];
+      for (const opt of options) {
+        if (opt && opt.branch) yield { question: opt.branch, sectionName: name, viaBranch: true };
+      }
+    }
+  }
+}
+
+// Structural validator for the whole spec (theme aside). Mirrors validateTheme's
+// house style: collect messages, return { ok, errors }. Catches the silent
+// structural failures that otherwise only surface as a broken form in a browser.
+export function validateSpec(spec) {
+  const errors = [];
+  if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+    return { ok: false, errors: ['spec must be an object'] };
+  }
+  if (!Array.isArray(spec.sections) || spec.sections.length === 0) {
+    errors.push('spec.sections must be a non-empty array');
+  }
+  const seenIds = new Map();
+  for (const { question: q, viaBranch } of iterQuestions(spec)) {
+    if (q === null || typeof q !== 'object' || Array.isArray(q)) {
+      errors.push('question must be an object');
+      continue;
+    }
+    const where = q.id ? `question "${q.id}"` : `question with label ${JSON.stringify(q.label)}`;
+    if (typeof q.id !== 'string' || q.id.length === 0) {
+      errors.push(`${where}: id must be a non-empty string`);
+    } else if (seenIds.has(q.id)) {
+      errors.push(`duplicate question id "${q.id}" (ids must be globally unique across the form, including branch ids)`);
+    } else {
+      seenIds.set(q.id, true);
+    }
+    if (!KNOWN_TYPES.has(q.type)) {
+      errors.push(`${where}: unknown type ${JSON.stringify(q.type)} (allowed: ${[...KNOWN_TYPES].join(', ')})`);
+      continue;
+    }
+    if (OPTION_TYPES.has(q.type)) {
+      if (!Array.isArray(q.options) || q.options.length === 0) {
+        errors.push(`${where}: type "${q.type}" requires a non-empty options array`);
+      } else if (q.type === 'segmented' && (q.options.length < 2 || q.options.length > 5)) {
+        errors.push(`${where}: segmented requires 2–5 options, got ${q.options.length}`);
+      }
+    }
+    if (q.type === 'priority-rank' && (!Array.isArray(q.options) || q.options.length < 2)) {
+      errors.push(`${where}: priority-rank requires at least 2 options`);
+    }
+    if (q.type === 'scale' && !Array.isArray(q.options) && !Array.isArray(q.labels) && !Array.isArray(q.anchors)) {
+      errors.push(`${where}: scale requires options, labels, or anchors`);
+    }
+    if (Array.isArray(q.options)) {
+      for (const opt of q.options) {
+        if (opt && opt.branch) {
+          if (q.type !== 'radio') {
+            errors.push(`${where}: branch is only supported on radio options, not "${q.type}"`);
+          }
+          const nested = Array.isArray(opt.branch.options) &&
+            opt.branch.options.some((o) => o && o.branch);
+          if (nested) errors.push(`${where}: nested branches are not supported`);
+        }
+      }
+    }
+    if (viaBranch && q.type === 'radio' && Array.isArray(q.options) &&
+      q.options.some((o) => o && o.branch)) {
+      errors.push(`${where}: nested branches are not supported`);
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 export async function loadSpec(specPath) {
   const abs = resolve(specPath);
   const raw = await readFile(abs, 'utf8');
@@ -127,10 +212,29 @@ export async function loadSpec(specPath) {
       throw err;
     }
   }
+  const structural = validateSpec(spec);
+  if (!structural.ok) {
+    const err = new Error(`Invalid spec in ${abs}:\n  - ${structural.errors.join('\n  - ')}`);
+    err.specPath = abs;
+    err.specErrors = structural.errors;
+    throw err;
+  }
   return { spec, path: abs };
 }
 
+// How ifbase.css/js are referenced in the built HTML:
+//   'inline'   — embed both files into the HTML (self-contained, portable). Default.
+//   'absolute' — absolute file:// URLs at the skill root (styled only while the
+//                skill stays put on this machine; used by the render harness).
+//   'relative' — leave the template's relative href/src (works only when the form
+//                is saved beside the skill files).
+const ASSET_MODES = new Set(['inline', 'absolute', 'relative']);
+
 export async function buildFormHtml(spec, opts = {}) {
+  const assets = opts.assets || 'inline';
+  if (!ASSET_MODES.has(assets)) {
+    throw new Error(`build-form: unknown assets mode "${assets}" (allowed: ${[...ASSET_MODES].join(', ')})`);
+  }
   const tpl = await readFile(TEMPLATE_PATH, 'utf8');
   const finalSpec = applyOverrides(spec, opts);
   const json = JSON.stringify(finalSpec, null, 2);
@@ -140,20 +244,37 @@ export async function buildFormHtml(spec, opts = {}) {
   if (replaced === tpl) {
     throw new Error('build-form: failed to substitute spec block; template may have drifted');
   }
-  // The shipped template references ifbase.css/js relatively (correct for a saved
-  // form sitting beside the skill files). The harness writes the built form to a
-  // temp dir and loads it via file://, where relative refs would not resolve — so
-  // rewrite them to absolute file:// URLs at the skill root for rendering only.
-  const cssUrl = pathToFileURL(join(SKILL_ROOT, 'ifbase.css')).href;
-  const jsUrl = pathToFileURL(join(SKILL_ROOT, 'ifbase.js')).href;
-  replaced = replaced
-    .replace('href="ifbase.css"', `href="${cssUrl}"`)
-    .replace('src="ifbase.js"', `src="${jsUrl}"`);
+  replaced = await applyAssets(replaced, assets);
   return replaced;
 }
 
+async function applyAssets(html, mode) {
+  if (mode === 'relative') return html;
+  if (mode === 'absolute') {
+    const cssUrl = pathToFileURL(join(SKILL_ROOT, 'ifbase.css')).href;
+    const jsUrl = pathToFileURL(join(SKILL_ROOT, 'ifbase.js')).href;
+    return html
+      .replace('href="ifbase.css"', `href="${cssUrl}"`)
+      .replace('src="ifbase.js"', `src="${jsUrl}"`);
+  }
+  // inline
+  const css = await readFile(join(SKILL_ROOT, 'ifbase.css'), 'utf8');
+  const js = await readFile(join(SKILL_ROOT, 'ifbase.js'), 'utf8');
+  return html
+    .replace(
+      /<link rel="stylesheet" href="ifbase\.css">/,
+      () => `<style>\n${css}\n</style>`,
+    )
+    .replace(
+      /<script src="ifbase\.js"><\/script>/,
+      () => `<script>\n${js}\n</script>`,
+    );
+}
+
 export async function writeFormFile(spec, opts = {}) {
-  const html = await buildFormHtml(spec, opts);
+  // The render harness writes to a temp dir and loads via file://; absolute
+  // file:// asset URLs are what it has always relied on. Callers can override.
+  const html = await buildFormHtml(spec, { assets: 'absolute', ...opts });
   await mkdir(TMP_DIR, { recursive: true });
   const name = (opts.tmpName || `form-${Date.now()}`) + '.html';
   const out = join(TMP_DIR, name);

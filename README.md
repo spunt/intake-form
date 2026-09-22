@@ -4,7 +4,13 @@
 
 ![A generated intake form: a sidebar table of contents with per-question status, an inference box, an unselected option carrying a "likely match" badge, a "Not sure" escape hatch, a commentary field, and Skip and Flag controls](docs/screenshot.png)
 
-<sub>**Try it:** open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) in any browser — one self-contained file showing every question type.</sub>
+<sub>**Try it live:** [www.bobspunt.com/intake-form/docs/demo.html](https://www.bobspunt.com/intake-form/docs/demo.html) — one self-contained file showing every question type. Or open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) locally.</sub>
+
+### The reviewer's flow
+
+Answering steps through one question at a time; the sidebar tracks status live, and every question can be skipped or flagged.
+
+![Stepping through the wizard: selecting a radio option and a checkbox, then advancing to a labeled scale question, with the sidebar marking each answered question as the reviewer progresses](docs/demo.gif)
 
 ## Why this exists
 
@@ -64,7 +70,7 @@ export and tells the consuming agent to regenerate rather than proceed.
 
 There is no install step for the form itself — it's a template plus a renderer.
 
-**As an agent skill (Claude Code, Codex, or any SKILL.md-aware agent).** Drop this folder into your skills directory (e.g. `~/.claude/skills/intake-form` for Claude Code, `~/.agents/skills/intake-form` for Codex). The agent reads [`SKILL.md`](SKILL.md), fills the spec inside [`template.html`](template.html), and saves a form to your project.
+**As an agent skill (Claude Code, Codex, or any SKILL.md-aware agent).** Drop this folder into your skills directory (e.g. `~/.claude/skills/intake-form` for Claude Code, `~/.agents/skills/intake-form` for Codex). The agent reads [`SKILL.md`](SKILL.md), writes a JSON spec, and builds a form into your project.
 
 **As a Claude Code plugin.**
 
@@ -73,7 +79,13 @@ There is no install step for the form itself — it's a template plus a renderer
 /plugin install intake-form@intake-form
 ```
 
-**By hand.** Open [`template.html`](template.html), replace the JSON inside `<script id="form-spec">` with your own spec (schema in [`SKILL.md`](SKILL.md)), and open the file in a browser. To produce a self-contained form that works anywhere, inline `ifbase.css` and `ifbase.js` into the saved file — see [`examples/question-type-catalog.html`](examples/question-type-catalog.html) for the result.
+**By hand.** Write a JSON spec (schema in [`SKILL.md`](SKILL.md)) and build it with the bundled CLI:
+
+```bash
+node tools/build.mjs my-spec.json --out my-form.html
+```
+
+The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.html` is one self-contained file that opens anywhere and survives being emailed — see [`examples/question-type-catalog.html`](examples/question-type-catalog.html) for the result. A malformed spec (unknown question type, duplicate id, bad theme) fails at build time with a clear message instead of a broken form in the browser. No Node? Edit [`template.html`](template.html) directly — replace the JSON inside `<script id="form-spec">` and open it beside the skill files.
 
 ## How it works
 
@@ -92,7 +104,7 @@ There is no install step for the form itself — it's a template plus a renderer
 
 ## Quality
 
-The renderer is backed by a verification harness in [`tools/`](tools/): `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)) and `axe-audit.mjs` (programmatic accessibility audit on both views). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), and `axe-audit.mjs` (programmatic accessibility audit on both views). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
 
 Current state: 12/12 specs render with zero console errors, and zero axe violations across both layouts. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 

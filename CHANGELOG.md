@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] — 2026-09
+
+Agent-ergonomics release. The theme: building a form should be one documented,
+validated command — not a hand-rolled string substitution each agent reimplements
+slightly differently. Everything here is authoring-path; the runtime (`ifbase.js`,
+`ifbase.css`) is unchanged.
+
+### Added
+
+- **`tools/build.mjs` — the authoring CLI.** `node tools/build.mjs spec.json --out
+  path/to/form.html` builds a form to any caller-chosen path. Flags: `--assets
+  inline|absolute|relative`, `--theme`, `--hue`. Replaces the previous per-agent
+  hand-substitution of the spec into `template.html`.
+- **Self-contained forms by default.** `--assets inline` embeds `ifbase.css` and
+  `ifbase.js` into the HTML, so a built form is one portable file that opens anywhere
+  and survives being emailed or moved — no dependence on where the skill is installed.
+  `absolute` (file:// URLs at the skill root) and `relative` (beside the skill files)
+  remain available.
+- **`validateSpec()` — structural validation before render.** `loadSpec` now rejects a
+  malformed spec with a clear message instead of producing a form that breaks silently
+  in the browser. Checks: unknown question types, duplicate ids (including branch ids),
+  `branch` on a non-`radio` type, nested branches, `segmented` option count (2–5),
+  `priority-rank`/`scale` option requirements, empty `sections`.
+- **`tools/` documented in SKILL.md.** The authoring procedure now points at the CLI
+  and library as the preferred path, with a tools reference table and a
+  defaults-by-type table (which types honor `default`, which export an untouched
+  marker) so the no-pre-selection asymmetry is stated in one place.
+
 ## [1.1.0] — 2026-09
 
 Response-quality release. The theme: a form should be able to tell you it asked the

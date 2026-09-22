@@ -31,11 +31,32 @@ The template ships with **relative** references (`ifbase.css`, `ifbase.js`), whi
 
 ## Authoring procedure
 
+**Preferred — build with the bundled CLI.** The skill ships a builder that substitutes the spec, validates it, and writes a self-contained form. Use it instead of hand-editing `template.html`; every agent that hand-rolls the substitution writes a slightly different one, which is the duplication this skill exists to prevent.
+
+1. Decide your sections + questions.
+2. Write the spec to a `.json` file (see § Spec schema).
+3. Build the form:
+   ```
+   node <skill-dir>/tools/build.mjs spec.json --out path/to/form.html
+   ```
+   `<skill-dir>` is this skill's install directory. `--out` is relative to the current working directory (see § Save path). The default `--assets inline` embeds `ifbase.css`/`ifbase.js` into the HTML, so the form is one portable file that opens anywhere — no dependence on where the skill lives. A bad spec (unknown question type, duplicate id, malformed theme) fails here with a clear message, not silently in the browser.
+4. Tell the user the full path.
+
+**Tools reference:**
+
+| File | Role | Agent-facing? |
+|---|---|---|
+| `tools/build.mjs <spec> --out <path>` | Build a form to any path. `--assets inline\|absolute\|relative`, `--theme`, `--hue`. | Yes — the authoring entry point |
+| `tools/lib/build-form.mjs` | Library: `loadSpec`, `validateSpec`, `validateTheme`, `buildFormHtml`, `writeFormFile`. Import it to build in-process. | Yes |
+| `tools/render-test.mjs <spec> [--out <dir>]` | Headless render check: screenshots, console errors, export text, cold-render timing. | Dev/verification only |
+| `tools/axe-audit.mjs` | Accessibility audit. | Dev/verification only |
+
+**Fallback — hand-edit the template** (only if Node is unavailable):
+
 1. Read `template.html`.
-2. Decide your sections + questions.
-3. Replace the placeholder spec inside `<script id="form-spec" type="application/json">…</script>` with your real spec. Keep everything else byte-for-byte identical.
-4. Save the form to a sensible output folder relative to the current working directory (see § Save path).
-5. Tell the user the full path.
+2. Replace the placeholder spec inside `<script id="form-spec" type="application/json">…</script>` with your real spec. Keep everything else byte-for-byte identical.
+3. The template references `ifbase.css`/`ifbase.js` relatively, so a hand-edited form is styled **only when saved beside the skill files**. To save it elsewhere, inline the two files by hand or use the CLI.
+4. Save to a sensible folder relative to the current working directory (see § Save path), and tell the user the full path.
 
 ## Save path
 
@@ -320,6 +341,17 @@ silent claim about what they think.
 `slider` and `priority-rank` are the two exceptions, because a range input always has a
 thumb position and a list always has an order. They keep their defaults, but an untouched
 control exports with `[UNTOUCHED DEFAULT — not confirmed by respondent]`.
+
+**Defaults by type** — the whole rule in one place, so you never re-derive it:
+
+| Type | Starts empty? | Honors `default`/`selected`? | Untouched export marker |
+|---|---|---|---|
+| `radio` | yes | no (ignored) | — (empty = skipped) |
+| `checkbox` | yes | no (ignored) | — (empty = skipped) |
+| `scale` | yes | no (ignored) | — (empty = skipped) |
+| `segmented` | yes | no (ignored) | — (empty = skipped) |
+| `slider` | no | yes | `[UNTOUCHED DEFAULT — not confirmed by respondent]` |
+| `priority-rank` | no | yes (initial order) | `[UNTOUCHED DEFAULT — not confirmed by respondent]` |
 
 ### Escape hatches: declare `kind`, don't hand-add "Not sure"
 
