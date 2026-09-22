@@ -285,6 +285,27 @@
       actions.className = 'topbar-actions';
       topbar.insertBefore(actions, toggle);
       actions.appendChild(toggle);
+
+      var critiqueBtn = document.createElement('button');
+      critiqueBtn.type = 'button';
+      critiqueBtn.className = 'topbar-btn';
+      critiqueBtn.id = 'toc-critique-btn';
+      critiqueBtn.setAttribute('aria-label', 'Wrong questions? Give feedback on this form');
+      critiqueBtn.innerHTML = '<span aria-hidden="true">⚑</span>'
+        + '<span class="topbar-btn-label">Wrong questions?</span>';
+      critiqueBtn.addEventListener('click', openCritique);
+      actions.appendChild(critiqueBtn);
+
+      var reviewBtn = document.createElement('button');
+      reviewBtn.type = 'button';
+      reviewBtn.className = 'topbar-btn topbar-btn-review';
+      reviewBtn.id = 'topbar-review-btn';
+      reviewBtn.setAttribute('aria-label', 'Review and export answers');
+      reviewBtn.innerHTML = '<span class="topbar-btn-label">Review &amp; export</span>'
+        + '<span aria-hidden="true">▸</span>';
+      reviewBtn.addEventListener('click', function () { gotoStep(TOTAL_Q); });
+      actions.appendChild(reviewBtn);
+
       actions.appendChild(buildThemeMenu());
     }
 
@@ -380,17 +401,6 @@
     var sidebar = buildSidebar(spec);
     shell.insertBefore(sidebar, shell.firstChild);
     document.body.appendChild(buildCritiquePanel());
-
-    // Mobile fallback: the sidebar (and its critique button) is hidden below
-    // 1100px, so the escape hatch would be unreachable exactly where forms feel
-    // longest. This floating button appears only in that range.
-    var fab = document.createElement('button');
-    fab.type = 'button';
-    fab.className = 'critique-fab';
-    fab.id = 'critique-fab';
-    fab.textContent = '⚑ Wrong questions?';
-    fab.addEventListener('click', openCritique);
-    document.body.appendChild(fab);
 
     refreshTOC();
   }
@@ -1490,25 +1500,9 @@
     nav.id = 'toc-body';
     aside.appendChild(nav);
 
-    var footer = document.createElement('div');
-    footer.className = 'toc-footer';
-
-    var critiqueBtn = document.createElement('button');
-    critiqueBtn.type = 'button';
-    critiqueBtn.className = 'toc-critique-btn';
-    critiqueBtn.id = 'toc-critique-btn';
-    critiqueBtn.textContent = '⚑ Wrong questions?';
-    critiqueBtn.addEventListener('click', openCritique);
-    footer.appendChild(critiqueBtn);
-
-    var reviewBtn = document.createElement('button');
-    reviewBtn.type = 'button';
-    reviewBtn.className = 'toc-review-btn';
-    reviewBtn.textContent = '▸ Review & export';
-    reviewBtn.addEventListener('click', function () { gotoStep(TOTAL_Q); });
-    footer.appendChild(reviewBtn);
-
-    aside.appendChild(footer);
+    // "Wrong questions?" and "Review & export" used to live in a sidebar footer here.
+    // They are global actions, not navigation, and the sidebar hides below 1100px —
+    // so they now sit in the sticky topbar, which is present at every width.
     return aside;
   }
 
@@ -1542,7 +1536,44 @@
       sec.questions.forEach(function (q) {
         stepIdx++;
         var myStep = stepIdx;
-        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+
+        // Display-only types (narrative-card, embedded-media) are steps the reader
+        // passes through but cannot answer, so they carry no status and are excluded
+        // from the section's done/total count. They still get a TOC entry: without
+        // one they are reachable only by clicking Next past every question, which
+        // made them effectively invisible.
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') {
+          var dItem = document.createElement('button');
+          dItem.type = 'button';
+          dItem.className = 'toc-item is-display'
+            + (myStep === currentQ ? ' current' : '');
+          if (myStep === currentQ) dItem.setAttribute('aria-current', 'step');
+
+          var dMark = document.createElement('span');
+          dMark.className = 'toc-mark';
+          dMark.textContent = q.type === 'embedded-media' ? '▣' : '▤';
+          dMark.setAttribute('aria-hidden', 'true');
+          dItem.appendChild(dMark);
+
+          // embedded-media carries no label/title — its human-readable text is the
+          // caption or the image alt. Fall through those before the id, which is a
+          // developer identifier and should never surface in the nav.
+          var dTxt = document.createElement('span');
+          dTxt.className = 'toc-item-label';
+          dTxt.textContent = q.tocLabel || q.label || q.title || q.caption || q.alt
+            || (q.type === 'embedded-media' ? 'Reference image' : 'Context');
+          dItem.appendChild(dTxt);
+
+          var dSr = document.createElement('span');
+          dSr.className = 'sr-only';
+          dSr.textContent = ' — reference material';
+          dItem.appendChild(dSr);
+
+          dItem.addEventListener('click', function () { gotoStep(myStep); });
+          group.appendChild(dItem);
+          return;
+        }
+
         var status = questionStatus(q);
         var item = document.createElement('button');
         item.type = 'button';

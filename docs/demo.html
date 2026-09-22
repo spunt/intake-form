@@ -307,9 +307,38 @@
 
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 80px; }
 
-.topbar { width: 100%; background: var(--if-color-surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 48px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-.topbar-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.topbar-actions { display: flex; align-items: center; gap: 8px; }
+/* Sticky so the global actions (layout toggle, critique, review, theme) stay
+   reachable while scrolling — most visible in the long "All sections" view.
+   Stacking order: topbar 90 < theme dropdown 100 < critique modal 200. The sticky
+   sidebar sets no z-index, so the topbar wins over it on scroll. */
+.topbar {
+  position: sticky; top: 0; z-index: 90;
+  width: 100%; background: var(--if-color-surface);
+  border-bottom: 1px solid var(--border); padding: 0 24px; height: 48px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px; gap: 12px;
+}
+.topbar-title {
+  font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* Global actions promoted out of the sidebar footer. */
+.topbar-btn {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  padding: 5px 10px; border-radius: var(--if-radius-sm);
+  font-family: var(--font); font-size: 11px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--if-color-border-strong);
+  background: var(--if-color-surface); color: var(--if-color-text-muted);
+  transition: color var(--if-duration-fast), border-color var(--if-duration-fast),
+              background var(--if-duration-fast);
+}
+.topbar-btn:hover { color: var(--if-color-text); border-color: var(--if-color-accent); background: var(--accent-muted); }
+.topbar-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.topbar-btn.active { border-color: var(--warning); color: var(--warning); }
+.topbar-btn-review { color: var(--accent); border-color: var(--if-color-accent-border); }
+.topbar-btn-review:hover { color: var(--if-color-on-accent); background: var(--accent); border-color: var(--accent); }
 .layout-toggle { display: flex; background: var(--if-color-surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
 .layout-toggle button { padding: 5px 13px; font-size: 11px; font-weight: 600; border: none; background: var(--if-color-surface); color: var(--if-color-text-muted); cursor: pointer; font-family: var(--font); transition: background 0.15s; }
 .layout-toggle button:hover { color: var(--if-color-text); }
@@ -358,16 +387,20 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 }
 .theme-menu-item.active .theme-menu-dot { background: var(--if-color-accent); border-color: var(--if-color-accent); }
 
-.header { width: 100%; max-width: 640px; margin-bottom: 14px; padding: 0 16px; }
+.header { width: 100%; max-width: 640px; margin-bottom: 14px; }
 .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 3px; }
 .header p { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
 
-.progress-bar { width: 100%; max-width: 640px; margin-bottom: 12px; padding: 0 16px; }
+.progress-bar { width: 100%; max-width: 640px; margin-bottom: 12px; }
 .progress-label { display: flex; justify-content: space-between; font-size: 11px; }
 .progress-label .section-name { color: var(--text-muted); font-weight: 500; }
 .progress-label .pct { color: var(--text-dim); }
 
-.card { width: 100%; max-width: 640px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; box-shadow: var(--shadow-sm); margin: 0 16px; }
+/* No horizontal margin: the 16px side gutter comes from .if-main's padding, so the
+   card fills its track exactly and stays aligned with .header / .progress-bar at
+   every width. A margin here plus width:100% overflowed the track, which made the
+   card render edge-to-edge on phones instead of inset. */
+.card { width: 100%; max-width: 640px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; box-shadow: var(--shadow-sm); }
 
 .wizard-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; display: inline-flex; align-items: center; gap: 5px; }
 .wizard-section-label::before { content: ''; display: block; width: 2px; height: 10px; background: var(--accent); border-radius: 1px; }
@@ -709,7 +742,12 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
    Shell + sidebar table of contents
    ───────────────────────────────────────────────────────────── */
 .if-shell { display: flex; align-items: flex-start; justify-content: center; gap: 28px; width: 100%; }
-.if-main { display: flex; flex-direction: column; align-items: center; flex: 0 1 640px; width: 640px; max-width: 100%; min-width: 0; }
+/* Fixed track, not content-sized: .card only sets max-width, which is a ceiling —
+   a content-sized column made the card's width follow each question's content
+   (measured 355-616px across the catalog). 672px = the 640px card measure plus the
+   16px side gutters, which live here (border-box) so header, progress bar, and card
+   share one alignment and the card stays inset on phones. */
+.if-main { display: flex; flex-direction: column; align-items: center; flex: 0 1 672px; width: 672px; max-width: 100%; min-width: 0; padding: 0 16px; }
 
 .if-sidebar {
   position: sticky; top: 64px;
@@ -741,23 +779,29 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
 .toc-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .toc-mark { flex: 0 0 auto; width: 12px; font-size: 11px; line-height: 1.5; }
 .toc-item.is-answered .toc-mark { color: var(--success); }
+.toc-item.is-display .toc-mark { color: var(--text-dim); }
+.toc-item.is-display .toc-item-label { font-style: italic; color: var(--text-dim); }
+.toc-item.is-display.current .toc-item-label { color: var(--accent); font-style: normal; }
 .toc-item.is-skipped  .toc-mark { color: var(--text-dim); }
 .toc-item.is-skipped  .toc-item-label { opacity: 0.6; }
 .toc-item-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .toc-flag { flex: 0 0 auto; color: var(--warning); font-size: 11px; }
-.toc-footer { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
-.toc-critique-btn, .toc-review-btn {
-  width: 100%; padding: 7px 9px; border-radius: var(--radius-sm);
-  font-family: var(--font); font-size: 11.5px; font-weight: 600; cursor: pointer;
-  text-align: left; border: 1px solid var(--border-strong);
-  background: var(--if-color-surface); color: var(--text-muted); transition: all 0.12s;
-}
-.toc-critique-btn:hover, .toc-review-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
-.toc-critique-btn.active { border-color: var(--warning); color: var(--warning); background: var(--if-color-surface); }
 
 @media (max-width: 1100px) {
   .if-sidebar { display: none; }
   .if-shell { gap: 0; }
+}
+
+/* Narrow viewports: the topbar now carries four controls, so drop the form title
+   and reduce the two promoted actions to their glyphs. The accessible name stays
+   on the button via aria-label, so both remain operable and screen-reader
+   labelled at phone widths. */
+@media (max-width: 720px) {
+  .topbar { padding: 0 12px; gap: 8px; justify-content: flex-end; }
+  .topbar-title { display: none; }
+  .topbar-btn-label { display: none; }
+  .topbar-btn { padding: 5px 8px; }
+  .layout-toggle button { padding: 5px 9px; }
 }
 
 .sr-only {
@@ -840,8 +884,9 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
 /* ─────────────────────────────────────────────────────────────
    Form critique panel
    ───────────────────────────────────────────────────────────── */
+/* Modal: must sit above the sticky topbar (90) and the theme dropdown (100). */
 .critique-overlay {
-  display: none; position: fixed; inset: 0; z-index: 90;
+  display: none; position: fixed; inset: 0; z-index: 200;
   background: oklch(20% 0.02 var(--if-hue, 235) / 0.42);
   align-items: center; justify-content: center; padding: 24px;
 }
@@ -889,19 +934,6 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
 .source-note { color: var(--text-dim); font-size: 11.5px; }
 .header .sources { margin-top: 12px; }
 
-/* Mobile-only critique escape hatch (sidebar is hidden below 1100px). */
-.critique-fab { display: none; }
-@media (max-width: 1100px) {
-  .critique-fab {
-    display: block; position: fixed; right: 14px; bottom: 14px; z-index: 80;
-    padding: 9px 15px; border-radius: 999px; cursor: pointer;
-    font-family: var(--font); font-size: 12px; font-weight: 600;
-    background: var(--surface); color: var(--text-muted);
-    border: 1px solid var(--border-strong);
-    box-shadow: 0 4px 14px oklch(20% 0.02 var(--if-hue, 235) / 0.18);
-  }
-  .critique-fab:hover, .critique-fab:focus-visible { border-color: var(--accent); color: var(--accent); }
-}
 
 </style>
 </head>
@@ -1190,9 +1222,9 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
         {
           "id": "embedded_media_demo",
           "type": "embedded-media",
-          "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Chart_line_2020_Q1.svg/320px-Chart_line_2020_Q1.svg.png",
-          "alt": "Example line chart showing Q1 2020 data",
-          "caption": "Example embedded image — reference artifact for the decision."
+          "src": "data:image/svg+xml;utf8,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20320%20180%22%20width=%22320%22%20height=%22180%22%20role=%22img%22%3E%20%3Crect%20width=%22320%22%20height=%22180%22%20fill=%22%23f7f8fa%22/%3E%20%3Cg%20stroke=%22%23d8dce3%22%20stroke-width=%221%22%3E%20%3Cline%20x1=%2240%22%20y1=%2220%22%20x2=%2240%22%20y2=%22150%22/%3E%3Cline%20x1=%2240%22%20y1=%22150%22%20x2=%22300%22%20y2=%22150%22/%3E%20%3Cline%20x1=%2240%22%20y1=%22115%22%20x2=%22300%22%20y2=%22115%22%20stroke-dasharray=%223%203%22/%3E%20%3Cline%20x1=%2240%22%20y1=%2280%22%20x2=%22300%22%20y2=%2280%22%20stroke-dasharray=%223%203%22/%3E%20%3Cline%20x1=%2240%22%20y1=%2245%22%20x2=%22300%22%20y2=%2245%22%20stroke-dasharray=%223%203%22/%3E%20%3C/g%3E%20%3Cpolyline%20fill=%22none%22%20stroke=%22%232f6df6%22%20stroke-width=%222.5%22%20stroke-linejoin=%22round%22%20points=%2240,132%2092,108%20144,118%20196,74%20248,58%20300,36%22/%3E%20%3Cg%20fill=%22%232f6df6%22%3E%20%3Ccircle%20cx=%2240%22%20cy=%22132%22%20r=%223%22/%3E%3Ccircle%20cx=%2292%22%20cy=%22108%22%20r=%223%22/%3E%3Ccircle%20cx=%22144%22%20cy=%22118%22%20r=%223%22/%3E%20%3Ccircle%20cx=%22196%22%20cy=%2274%22%20r=%223%22/%3E%3Ccircle%20cx=%22248%22%20cy=%2258%22%20r=%223%22/%3E%3Ccircle%20cx=%22300%22%20cy=%2236%22%20r=%223%22/%3E%20%3C/g%3E%20%3Cg%20font-family=%22system-ui,sans-serif%22%20font-size=%229%22%20fill=%22%236b7280%22%3E%20%3Ctext%20x=%2236%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ1%3C/text%3E%3Ctext%20x=%2288%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ2%3C/text%3E%20%3Ctext%20x=%22140%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ3%3C/text%3E%3Ctext%20x=%22192%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ4%3C/text%3E%20%3Ctext%20x=%22244%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ5%3C/text%3E%3Ctext%20x=%22296%22%20y=%22164%22%20text-anchor=%22middle%22%3EQ6%3C/text%3E%20%3Ctext%20x=%2234%22%20y=%22153%22%20text-anchor=%22end%22%3E0%3C/text%3E%3Ctext%20x=%2234%22%20y=%22118%22%20text-anchor=%22end%22%3E25%3C/text%3E%20%3Ctext%20x=%2234%22%20y=%2283%22%20text-anchor=%22end%22%3E50%3C/text%3E%3Ctext%20x=%2234%22%20y=%2248%22%20text-anchor=%22end%22%3E75%3C/text%3E%20%3C/g%3E%20%3Ctext%20x=%2240%22%20y=%2214%22%20font-family=%22system-ui,sans-serif%22%20font-size=%2210%22%20font-weight=%22600%22%20fill=%22%23374151%22%3EAdoption%20by%20quarter%20(illustrative)%3C/text%3E%20%3C/svg%3E",
+          "alt": "Illustrative line chart: adoption rising from Q1 to Q6",
+          "caption": "Example embedded image — reference artifact for the decision. Inlined as an SVG data URI so the form renders with no network access."
         }
       ]
     },
@@ -1573,6 +1605,27 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
       actions.className = 'topbar-actions';
       topbar.insertBefore(actions, toggle);
       actions.appendChild(toggle);
+
+      var critiqueBtn = document.createElement('button');
+      critiqueBtn.type = 'button';
+      critiqueBtn.className = 'topbar-btn';
+      critiqueBtn.id = 'toc-critique-btn';
+      critiqueBtn.setAttribute('aria-label', 'Wrong questions? Give feedback on this form');
+      critiqueBtn.innerHTML = '<span aria-hidden="true">⚑</span>'
+        + '<span class="topbar-btn-label">Wrong questions?</span>';
+      critiqueBtn.addEventListener('click', openCritique);
+      actions.appendChild(critiqueBtn);
+
+      var reviewBtn = document.createElement('button');
+      reviewBtn.type = 'button';
+      reviewBtn.className = 'topbar-btn topbar-btn-review';
+      reviewBtn.id = 'topbar-review-btn';
+      reviewBtn.setAttribute('aria-label', 'Review and export answers');
+      reviewBtn.innerHTML = '<span class="topbar-btn-label">Review &amp; export</span>'
+        + '<span aria-hidden="true">▸</span>';
+      reviewBtn.addEventListener('click', function () { gotoStep(TOTAL_Q); });
+      actions.appendChild(reviewBtn);
+
       actions.appendChild(buildThemeMenu());
     }
 
@@ -1668,17 +1721,6 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
     var sidebar = buildSidebar(spec);
     shell.insertBefore(sidebar, shell.firstChild);
     document.body.appendChild(buildCritiquePanel());
-
-    // Mobile fallback: the sidebar (and its critique button) is hidden below
-    // 1100px, so the escape hatch would be unreachable exactly where forms feel
-    // longest. This floating button appears only in that range.
-    var fab = document.createElement('button');
-    fab.type = 'button';
-    fab.className = 'critique-fab';
-    fab.id = 'critique-fab';
-    fab.textContent = '⚑ Wrong questions?';
-    fab.addEventListener('click', openCritique);
-    document.body.appendChild(fab);
 
     refreshTOC();
   }
@@ -2778,25 +2820,9 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
     nav.id = 'toc-body';
     aside.appendChild(nav);
 
-    var footer = document.createElement('div');
-    footer.className = 'toc-footer';
-
-    var critiqueBtn = document.createElement('button');
-    critiqueBtn.type = 'button';
-    critiqueBtn.className = 'toc-critique-btn';
-    critiqueBtn.id = 'toc-critique-btn';
-    critiqueBtn.textContent = '⚑ Wrong questions?';
-    critiqueBtn.addEventListener('click', openCritique);
-    footer.appendChild(critiqueBtn);
-
-    var reviewBtn = document.createElement('button');
-    reviewBtn.type = 'button';
-    reviewBtn.className = 'toc-review-btn';
-    reviewBtn.textContent = '▸ Review & export';
-    reviewBtn.addEventListener('click', function () { gotoStep(TOTAL_Q); });
-    footer.appendChild(reviewBtn);
-
-    aside.appendChild(footer);
+    // "Wrong questions?" and "Review & export" used to live in a sidebar footer here.
+    // They are global actions, not navigation, and the sidebar hides below 1100px —
+    // so they now sit in the sticky topbar, which is present at every width.
     return aside;
   }
 
@@ -2830,7 +2856,44 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
       sec.questions.forEach(function (q) {
         stepIdx++;
         var myStep = stepIdx;
-        if (q.type === 'narrative-card' || q.type === 'embedded-media') return;
+
+        // Display-only types (narrative-card, embedded-media) are steps the reader
+        // passes through but cannot answer, so they carry no status and are excluded
+        // from the section's done/total count. They still get a TOC entry: without
+        // one they are reachable only by clicking Next past every question, which
+        // made them effectively invisible.
+        if (q.type === 'narrative-card' || q.type === 'embedded-media') {
+          var dItem = document.createElement('button');
+          dItem.type = 'button';
+          dItem.className = 'toc-item is-display'
+            + (myStep === currentQ ? ' current' : '');
+          if (myStep === currentQ) dItem.setAttribute('aria-current', 'step');
+
+          var dMark = document.createElement('span');
+          dMark.className = 'toc-mark';
+          dMark.textContent = q.type === 'embedded-media' ? '▣' : '▤';
+          dMark.setAttribute('aria-hidden', 'true');
+          dItem.appendChild(dMark);
+
+          // embedded-media carries no label/title — its human-readable text is the
+          // caption or the image alt. Fall through those before the id, which is a
+          // developer identifier and should never surface in the nav.
+          var dTxt = document.createElement('span');
+          dTxt.className = 'toc-item-label';
+          dTxt.textContent = q.tocLabel || q.label || q.title || q.caption || q.alt
+            || (q.type === 'embedded-media' ? 'Reference image' : 'Context');
+          dItem.appendChild(dTxt);
+
+          var dSr = document.createElement('span');
+          dSr.className = 'sr-only';
+          dSr.textContent = ' — reference material';
+          dItem.appendChild(dSr);
+
+          dItem.addEventListener('click', function () { gotoStep(myStep); });
+          group.appendChild(dItem);
+          return;
+        }
+
         var status = questionStatus(q);
         var item = document.createElement('button');
         item.type = 'button';

@@ -191,20 +191,33 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
           // "icon":  "💡"        // optional emoji; rendered aria-hidden above title
           // Non-input: has no value, not included in review panel, not included in export.
           // An "id" field is still required by the spec parser but is ignored at runtime.
+          // Appears in the sidebar TOC as an italic reference entry (no status mark) and
+          // is excluded from the section's answered/total count. TOC label falls back:
+          // tocLabel -> label -> title -> "Context".
           // Example:
           { "id": "frame_stakes", "type": "narrative-card",
             "icon": "⚖️", "title": "Now for the stakes.",
             "body": "The next few questions help us understand what's on the line — and how to weight the factors." }
 
           // For embedded-media:
-          // "src":       "string"          // URL to image or video
+          // "src":       "string"          // image/video URL, or a data: URI (see below)
           // "alt":       "string"          // alt text for images (required for accessibility)
           // "caption":   "string"          // optional figcaption beneath the asset
           // "mediaType": "video"           // omit for image; set "video" to render <video> tag
           // Non-input: not included in review panel or export.
+          // Appears in the sidebar TOC as an italic reference entry, same as
+          // narrative-card. Label falls back: tocLabel -> label -> title -> caption ->
+          // alt -> "Reference image" (never the id).
+          //
+          // PORTABILITY: a remote src defeats the point of an --assets inline build —
+          // the HTML is self-contained but the image still needs network, and renders
+          // as an empty box offline, behind a firewall, or when the host blocks
+          // hotlinking. For an asset you control, inline it as a data: URI so the form
+          // is genuinely one file. Percent-encode "#" in any inline SVG (a literal "#"
+          // starts a URI fragment and silently truncates the image).
           // Example:
           { "id": "dashboard_screenshot", "type": "embedded-media",
-            "src": "https://example.com/chart.png", "alt": "Q3 revenue chart",
+            "src": "data:image/svg+xml;utf8,%3Csvg…", "alt": "Q3 revenue chart",
             "caption": "Q3 performance — 14% above target." }
 
           // For file-upload:
@@ -404,8 +417,9 @@ Two channels, both automatic — no spec needed.
 1. **Per-question flag** (`⚑ Flag this question`) — categorizes one question as wrong
    level / too specific / too vague / missing the point / irrelevant, plus a free-text
    "what should we have asked instead".
-2. **Form-level critique** (`⚑ Wrong questions?` in the sidebar, reachable from every
-   question) — same categories applied to the whole instrument.
+2. **Form-level critique** (`⚑ Wrong questions?` in the sticky topbar, reachable from
+   every question and at every viewport width) — same categories applied to the whole
+   instrument.
 
 This exists because the worst failure of an intake form is being *well-completed and
 wrong*. A user must be able to report a mis-targeted form without first completing it.

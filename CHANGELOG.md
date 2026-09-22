@@ -3,6 +3,53 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] — 2026-09-22
+
+Navigation and chrome release. The global actions move out of the sidebar into a
+sticky topbar, and the two display-only question types become reachable.
+
+### Changed
+
+- **`⚑ Wrong questions?` and `Review & export` moved to the topbar.** Both were in a
+  sidebar footer, below the full question tree — so on a long form they were scrolled
+  out of view, and below 1100 px they vanished entirely with the sidebar. They are
+  global actions rather than navigation, so they now sit in the topbar, which has the
+  room and is present at every width. At ≤720 px the form title hides and both buttons
+  reduce to their glyphs, keeping an `aria-label` so they stay operable and labelled.
+- **The topbar is sticky** (`position: sticky; top: 0`), so the layout toggle, both
+  promoted actions, and the theme switcher stay reachable while scrolling — most
+  noticeable in the long "All sections" view. Stacking order is now explicit: topbar 90
+  < theme dropdown 100 < critique modal 200. The critique overlay was previously also
+  `z-index: 90`, tying with the topbar and resolving only by DOM order.
+- **Side gutters come from the wizard track, not the card.** `.card` had `width: 100%`
+  plus `margin: 0 16px`, which overflowed its track and clamped back to full width — so
+  the card rendered edge-to-edge on phones instead of inset. The 16 px gutter now lives
+  on `.if-main` (`672px` = the 640 px card measure + gutters), and `.header` /
+  `.progress-bar` drop their own padding so all three share one alignment. Measured:
+  card inset 16 px at 375/480/640 px, previously 0 px.
+
+### Fixed
+
+- **`narrative-card` and `embedded-media` are now reachable.** `refreshTOC` skipped
+  both display-only types, so the only way to see them was to click Next past every
+  question and notice them in passing — in the published catalog they were effectively
+  invisible. Both now get an italic TOC entry with a reference glyph, excluded from the
+  section's answered/total count (which still shows `0/0`) because neither is
+  answerable. The label falls back `tocLabel → label → title → caption → alt →
+  placeholder`, so a raw question id never surfaces in the nav.
+- **The catalog's `embedded-media` example no longer needs network access.** It pointed
+  at a remote Wikimedia URL, which renders as an empty box offline, behind a firewall,
+  or when the host blocks hotlinking — and defeats the purpose of an `--assets inline`
+  build. It is now an inline SVG data URI. Note for spec authors: percent-encode `#`
+  in an inline SVG, since a literal `#` starts a URI fragment and silently truncates
+  the image.
+
+### Removed
+
+- **The mobile critique FAB.** It existed only because the sidebar (and its critique
+  button) hid below 1100 px. The topbar is present at every width, so the workaround
+  and its duplicate entry point are gone.
+
 ## [1.2.1] — 2026-09-22
 
 Runtime fixes for two defects visible in the published demo.
