@@ -193,7 +193,9 @@
   var THEME_PRESETS = [
     { value: 'default',   label: 'Default' },
     { value: 'editorial', label: 'Editorial' },
-    { value: 'terminal',  label: 'Terminal' }
+    { value: 'terminal',  label: 'Terminal' },
+    { value: 'kraft',     label: 'Kraft' },
+    { value: 'studio',    label: 'Studio' }
   ];
 
   function buildThemeMenu() {

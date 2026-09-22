@@ -47,6 +47,21 @@ Theme presets live as `[data-theme="<preset>"]` attribute-selector blocks in `if
 
 All five presets ship with `[data-theme=...]` CSS blocks in `ifbase.css` and pass the accessibility audit (zero axe violations on both layouts).
 
+### Runtime theme switcher
+
+Every rendered form includes a **Theme** button in the top bar that lets the human
+switch preset live, without rebuilding. The menu is built from `THEME_PRESETS` in
+`ifbase.js` and lists all five presets; picking one rewrites `<html data-theme="…">`.
+
+The switcher changes only the preset. A spec's `hue` and per-token `palette` overrides
+are applied at load and are **not** reverted by switching, so a form with heavy
+per-token overrides may look similar across presets — that is expected, because
+palette overrides win over preset values (see **Resolution order** below).
+
+When adding a preset, update **both** `ifbase.css` (the `[data-theme]` block) and
+`THEME_PRESETS` in `ifbase.js`. Shipping only the CSS leaves the preset valid in a spec
+but unreachable from the UI.
+
 ## Theme block (spec)
 
 The spec's optional `theme` object is translated to CSS custom-property writes on `<html>` at form load via `applyTheme(spec)` in `ifbase.js`. Field reference:

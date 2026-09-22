@@ -709,7 +709,7 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
    Shell + sidebar table of contents
    ───────────────────────────────────────────────────────────── */
 .if-shell { display: flex; align-items: flex-start; justify-content: center; gap: 28px; width: 100%; }
-.if-main { display: flex; flex-direction: column; align-items: center; flex: 0 1 auto; min-width: 0; }
+.if-main { display: flex; flex-direction: column; align-items: center; flex: 0 1 640px; width: 640px; max-width: 100%; min-width: 0; }
 
 .if-sidebar {
   position: sticky; top: 64px;
@@ -1481,7 +1481,9 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
   var THEME_PRESETS = [
     { value: 'default',   label: 'Default' },
     { value: 'editorial', label: 'Editorial' },
-    { value: 'terminal',  label: 'Terminal' }
+    { value: 'terminal',  label: 'Terminal' },
+    { value: 'kraft',     label: 'Kraft' },
+    { value: 'studio',    label: 'Studio' }
   ];
 
   function buildThemeMenu() {

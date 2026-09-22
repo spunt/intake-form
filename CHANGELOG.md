@@ -3,12 +3,44 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-09-22
+
+Runtime fixes for two defects visible in the published demo.
+
+### Fixed
+
+- **Card width no longer jumps between questions.** `.if-main` used `flex: 0 1 auto`,
+  which sized the wizard column to its content, so `.card`'s `max-width: 640px` acted
+  as a ceiling rather than a fixed width. Measured across the ten questions of
+  `examples/question-type-catalog.json`, the card rendered at ten different widths
+  spanning 355–616 px (a 261 px spread), producing a visible jolt on every step
+  change. `.if-main` is now a fixed 640 px track (`flex: 0 1 640px; width: 640px;
+  max-width: 100%`), so the card holds 640 px on every question and in every preset
+  while still shrinking below 640 px viewports. Measured after the fix: a single
+  distinct width, 0 px spread; header, progress bar, and card stay left-aligned at
+  1440/1200/1100/900/768/480/375 px with no horizontal overflow.
+- **`kraft` and `studio` are now reachable from the theme switcher.** v1.2.0 shipped
+  both presets in `ifbase.css`, the schema, and the docs, but `THEME_PRESETS` in
+  `ifbase.js` still listed only three, so the two new presets could not be selected in
+  a rendered form — they were documented but invisible. All five presets are now in the
+  menu and verified to apply a distinct accent and background.
+
+### Documentation
+
+- Documented the **runtime theme switcher** in `references/theming.md` — previously an
+  undocumented user-facing feature, which is why the missing presets went unnoticed.
+  Adds the rule that a new preset must be added to both `ifbase.css` and
+  `THEME_PRESETS`, and notes that switching presets does not revert spec `hue`/`palette`
+  overrides.
+- Rebuilt `docs/demo.html` so the published demo carries both fixes.
+
 ## [1.2.0] — 2026-09
 
 Agent-ergonomics release. The theme: building a form should be one documented,
 validated command — not a hand-rolled string substitution each agent reimplements
-slightly differently. Everything here is authoring-path; the runtime (`ifbase.js`,
-`ifbase.css`) is unchanged.
+slightly differently. Everything here is authoring-path, with one runtime exception:
+the `kraft`/`studio` preset blocks added to `ifbase.css` (see below). `ifbase.js` is
+unchanged.
 
 ### Added
 
