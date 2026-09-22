@@ -1,0 +1,55 @@
+{
+  "title": "Creative Brief",
+  "heading": "Project brief",
+  "subhead": "A few questions to frame the work before we start sketching.",
+  "exportTitle": "CREATIVE BRIEF",
+  "theme": { "preset": "kraft" },
+
+  "sections": [
+    {
+      "name": "The ask",
+      "questions": [
+        {
+          "id": "deliverable",
+          "type": "radio",
+          "kind": "factual",
+          "label": "What are we making?",
+          "inferenceBox": "Your last three briefs were single-page campaigns.",
+          "options": [
+            { "value": "campaign", "label": "Campaign page", "description": "One page, one message.", "badge": "Likely — matches recent work" },
+            { "value": "identity", "label": "Brand identity", "description": "Logo, palette, type system." },
+            { "value": "collateral", "label": "Print collateral", "description": "Deck, one-pager, or flyer." }
+          ]
+        },
+        {
+          "id": "tone",
+          "type": "segmented",
+          "label": "Voice",
+          "options": [
+            { "value": "warm", "label": "warm" },
+            { "value": "bold", "label": "bold" },
+            { "value": "quiet", "label": "quiet" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Constraints",
+      "questions": [
+        {
+          "id": "deadline",
+          "type": "text",
+          "label": "Hard deadline (optional)",
+          "hint": "e.g. launch date",
+          "required": false
+        },
+        {
+          "id": "notes",
+          "type": "textarea",
+          "label": "Anything the brief must not miss?",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

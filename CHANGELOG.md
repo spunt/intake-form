@@ -30,6 +30,12 @@ slightly differently. Everything here is authoring-path; the runtime (`ifbase.js
   and library as the preferred path, with a tools reference table and a
   defaults-by-type table (which types honor `default`, which export an untouched
   marker) so the no-pre-selection asymmetry is stated in one place.
+- **`kraft` and `studio` theme presets shipped.** Both were reserved enum values whose
+  CSS had not shipped, so a spec using them passed validation but rendered as `default`.
+  `kraft` (warm amber, terracotta accent) and `studio` (neutral surfaces, violet accent)
+  now have `[data-theme=...]` blocks in `ifbase.css` and pass the accessibility audit
+  (zero axe violations on both layouts). The schema, SKILL.md, and `references/theming.md`
+  now agree with the CSS.
 
 ## [1.1.0] — 2026-09
 

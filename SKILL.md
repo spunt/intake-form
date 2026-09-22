@@ -93,7 +93,7 @@ Add a `"theme"` block to the spec to control the visual style. Three common patt
 ```json
 "theme": { "preset": "terminal" }
 ```
-Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `terminal` (dark mono, green accent).
+Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `terminal` (dark mono, green accent), `kraft` (warm amber, sans), `studio` (violet accent, neutral surfaces).
 
 **2. Hue shift** — keeps the default layout but rotates the accent and tinted neutrals to a new hue (0–360):
 ```json
@@ -526,7 +526,7 @@ You don't need to write a custom `buildExport` — the renderer reads from the s
 
 Style forms **only** through the spec's `theme` block — `preset`, `hue`, and per-token `palette` (the three patterns in § "Quick start: theming" above). The renderer maps spec values to `--if-*` CSS custom properties via `applyTheme(spec)` in `ifbase.js`. **Never** write per-form CSS files or inline `<style>` blocks, and use OKLCH (not hex/rgb) for any color value.
 
-`kraft` and `studio` are reserved preset names but their CSS has not shipped yet — they fall back silently to default tokens.
+Five presets ship: `default` (blue SaaS), `editorial` (serif, warm paper), `terminal` (dark mono, green accent), `kraft` (warm amber, sans), and `studio` (violet accent, neutral surfaces).
 
 **Full theming reference** — the complete `--if-*` token contract, preset catalog, and every `theme`-block field (`typography`, `motion`, `density`, `voice`, resolution order) — lives in **`references/theming.md`**. Read it only when a form needs customization beyond the three quick-start patterns.
 

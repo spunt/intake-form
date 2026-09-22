@@ -234,6 +234,77 @@
   --if-density: 0.9;
 }
 
+/* Kraft: warm amber-tinted neutrals, sans-serif, slower quint motion. Creative briefs, warm brand voice. */
+:root[data-theme="kraft"] {
+  --font:            var(--if-font-sans);
+  --if-font-display: var(--if-font-sans);
+  --if-font-body:    var(--if-font-sans);
+
+  --if-hue:                 70;
+  --if-color-accent:        oklch(44%   0.135  55);
+  --if-color-accent-hover:  oklch(38%   0.130  55);
+  --if-color-accent-soft:   oklch(93%   0.045  70);
+  --if-color-accent-soft2:  oklch(89%   0.065  70);
+  --if-color-accent-ring:   oklch(44%   0.135  55 / 0.22);
+  --if-color-accent-border: oklch(44%   0.135  55 / 0.24);
+
+  --if-color-bg:            oklch(95.5% 0.024  75);
+  --if-color-surface:       oklch(98.5% 0.012  75);
+  --if-color-surface-soft:  oklch(93%   0.030  75);
+  --if-color-border:        oklch(86%   0.028  75);
+  --if-color-border-strong: oklch(72%   0.036  70);
+
+  --if-color-text:          oklch(22%   0.030  60);
+  --if-color-text-muted:    oklch(44%   0.032  60);
+  --if-color-text-dim:      oklch(47%   0.030  60);
+
+  --if-color-info-bg:       oklch(94%   0.040  75);
+  --if-color-info-border:   oklch(80%   0.075  70);
+  --if-color-info-text:     oklch(45%   0.120  55);
+
+  --if-duration-fast:       140ms;
+  --if-duration-base:       230ms;
+  --if-duration-slow:       360ms;
+  --if-ease-out-quint:      cubic-bezier(0.22, 1, 0.36, 1);
+
+  --if-density: 1.05;
+}
+
+/* Studio: clean neutral surfaces with a distinct violet accent for brand-heavy forms with section identity. */
+:root[data-theme="studio"] {
+  --font:            var(--if-font-sans);
+  --if-font-display: var(--if-font-sans);
+  --if-font-body:    var(--if-font-sans);
+
+  --if-hue:                 290;
+  --if-color-accent:        oklch(48%   0.180 300);
+  --if-color-accent-hover:  oklch(41%   0.185 300);
+  --if-color-accent-soft:   oklch(94%   0.035 300);
+  --if-color-accent-soft2:  oklch(89%   0.060 300);
+  --if-color-accent-ring:   oklch(48%   0.180 300 / 0.20);
+  --if-color-accent-border: oklch(48%   0.180 300 / 0.22);
+
+  --if-color-bg:            oklch(97.5% 0.004 290);
+  --if-color-surface:       oklch(99.5% 0.002 290);
+  --if-color-surface-soft:  oklch(96%   0.008 290);
+  --if-color-border:        oklch(88%   0.008 290);
+  --if-color-border-strong: oklch(74%   0.012 290);
+
+  --if-color-text:          oklch(18%   0.014 300);
+  --if-color-text-muted:    oklch(46%   0.018 300);
+  --if-color-text-dim:      oklch(52%   0.016 300);
+
+  --if-color-info-bg:       oklch(96%   0.020 300);
+  --if-color-info-border:   oklch(85%   0.055 300);
+  --if-color-info-text:     oklch(44%   0.170 300);
+
+  --if-duration-fast:       120ms;
+  --if-duration-base:       190ms;
+  --if-duration-slow:       300ms;
+
+  --if-density: 1.0;
+}
+
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 80px; }
 
 .topbar { width: 100%; background: var(--if-color-surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 48px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }

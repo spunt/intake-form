@@ -1,0 +1,54 @@
+{
+  "title": "Brand Intake",
+  "heading": "Brand form",
+  "subhead": "Tell us how this product should present itself.",
+  "exportTitle": "BRAND INTAKE",
+  "theme": { "preset": "studio" },
+
+  "sections": [
+    {
+      "name": "Positioning",
+      "questions": [
+        {
+          "id": "audience",
+          "type": "radio",
+          "kind": "judgment",
+          "label": "Primary audience",
+          "options": [
+            { "value": "consumer", "label": "Consumer", "description": "Everyday individual users." },
+            { "value": "prosumer", "label": "Prosumer", "description": "Power users and creators." },
+            { "value": "enterprise", "label": "Enterprise", "description": "Teams and procurement." }
+          ]
+        },
+        {
+          "id": "priorities",
+          "type": "priority-rank",
+          "label": "Rank what the brand should signal first",
+          "options": [
+            { "value": "trust", "label": "Trust" },
+            { "value": "craft", "label": "Craft" },
+            { "value": "speed", "label": "Speed" },
+            { "value": "playfulness", "label": "Playfulness" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Expression",
+      "questions": [
+        {
+          "id": "energy",
+          "type": "scale",
+          "label": "Where should the visual energy sit?",
+          "labels": ["Restrained", "Calm", "Balanced", "Lively", "Loud"]
+        },
+        {
+          "id": "notes",
+          "type": "textarea",
+          "label": "References or anti-references (optional)",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

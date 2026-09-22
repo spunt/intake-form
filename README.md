@@ -95,7 +95,7 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 - **The form can tell you it is wrong.** Any question can be skipped (with a reason) or flagged, and a form-level critique panel reachable from every question exports a `FORM_CRITIQUE` block telling the consuming agent to regenerate rather than proceed.
 - **Sidebar navigation.** A persistent table of contents lists every section and question with live status — answered, skipped, unanswered, flagged — and jumps to any of them.
 - **Cited material stays reachable.** Attach `sources` to the form or any question; they render as links that open in a new tab, so following a citation never discards the reviewer's answers.
-- **Themeable from the spec.** A single `--if-*` OKLCH token layer drives color, type, motion, and density. Set a `theme` block (`preset`, `hue`, `palette`, …) in the spec; no per-form CSS. Presets ship for `default`, `editorial`, and `terminal`.
+- **Themeable from the spec.** A single `--if-*` OKLCH token layer drives color, type, motion, and density. Set a `theme` block (`preset`, `hue`, `palette`, …) in the spec; no per-form CSS. Five presets ship: `default`, `editorial`, `terminal`, `kraft`, and `studio` — all pass the accessibility audit.
 - **Client-side only.** Nothing is sent anywhere. Answers live in the page until the user clicks Copy for Claude or exports.
 
 ## Question types
@@ -106,7 +106,7 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 
 The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), and `axe-audit.mjs` (programmatic accessibility audit on both views). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
 
-Current state: 12/12 specs render with zero console errors, and zero axe violations across both layouts. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
+Current state: 13/13 specs render with zero console errors, and zero axe violations across both layouts and all five theme presets. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 
 ```bash
 cd tools && npm install

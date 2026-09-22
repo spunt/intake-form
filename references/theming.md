@@ -42,10 +42,10 @@ Theme presets live as `[data-theme="<preset>"]` attribute-selector blocks in `if
 | `default` | Sans-serif system stack | Blue-tinted neutrals, WCAG-AA accent | 120/180/280 ms | 1× | General intake, SaaS-style |
 | `editorial` | Serif (Iowan Old Style / Baskerville) | Warm parchment bg, ink-blue accent (H=230) | 150/240/380 ms | 1.15× (airy) | Book/manuscript review, literary content, deliberate pacing |
 | `terminal` | Monospace (ui-monospace / SF Mono / Fira Code) | Dark surface `oklch(12%)`, bright green accent H=150 | 80/120/180 ms (snappy) | 0.9× (compact) | CLI tools, deploy configs, developer intake |
-| `kraft` | Sans-serif | Warm amber tinted neutrals (not yet shipped) | Slower quint | — | Creative briefs, warm brand voice |
-| `studio` | Sans-serif | Multi-role palette (not yet shipped) | — | — | Brand-heavy forms with section identity |
+| `kraft` | Sans-serif | Warm amber-tinted neutrals, terracotta accent (H=55) | Slower quint | 1.05× | Creative briefs, warm brand voice |
+| `studio` | Sans-serif | Neutral cool surfaces, violet accent (H=300) | Snappy | 1× | Brand-heavy forms with section identity |
 
-Presets `kraft` and `studio` are reserved names but their CSS blocks have not yet shipped; using them falls back silently to default tokens.
+All five presets ship with `[data-theme=...]` CSS blocks in `ifbase.css` and pass the accessibility audit (zero axe violations on both layouts).
 
 ## Theme block (spec)
 
@@ -53,7 +53,7 @@ The spec's optional `theme` object is translated to CSS custom-property writes o
 
 | Field | Type | Effect |
 |---|---|---|
-| `preset` | preset name | Sets `<html data-theme="…">`. Activates that preset's CSS block. Falls back silently to default tokens if the named preset hasn't shipped yet. |
+| `preset` | preset name | Sets `<html data-theme="…">`. Activates that preset's CSS block. All five enum values (`default`, `editorial`, `terminal`, `kraft`, `studio`) have shipped CSS blocks. |
 | `hue` | number 0–360 | Sets `--if-hue`. Shifts the entire tinted-neutrals + accent palette to a new hue without touching individual tokens. |
 | `palette.<token>` | OKLCH string | Per-token override. Keys (no `--if-color-` prefix): `accent`, `accent-hover`, `accent-soft`, `accent-soft2`, `bg`, `surface`, `surface-soft`, `border`, `border-strong`, `text`, `text-muted`, `text-dim`, `success`, `warning`, `danger`. Values must be valid OKLCH strings (e.g., `"oklch(48% 0.13 235)"`). Hex/rgb is forbidden. |
 | `typography.display` | `sans` \| `serif` \| `mono` | Sets `--if-font-display` (used by display headings). |
