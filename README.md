@@ -2,15 +2,9 @@
 
 **Turn an underspecified request into a clean, native-feeling HTML form by filling in one JSON spec — no form HTML by hand, no backend, no build step.** The reviewer fills it out in the browser and clicks **Copy for Claude**; you get back a structured, agent-ready payload.
 
-![A generated intake form: a sidebar table of contents with per-question status, an inference box, an unselected option carrying a "likely match" badge, a "Not sure" escape hatch, a commentary field, and Skip and Flag controls](docs/screenshot.png)
-
-<sub>**Try it live:** [www.bobspunt.com/intake-form/docs/demo.html](https://www.bobspunt.com/intake-form/docs/demo.html) — one self-contained file showing every question type. Or open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) locally.</sub>
-
-### The reviewer's flow
-
-Answering steps through one question at a time; the sidebar tracks status live, and every question can be skipped or flagged.
-
 ![Stepping through the wizard: selecting a radio option and a checkbox, then advancing to a labeled scale question, with the sidebar marking each answered question as the reviewer progresses](docs/demo.gif)
+
+<sub>Answering steps through one question at a time; the sidebar tracks status live, and every question can be skipped or flagged. **Try it live:** [www.bobspunt.com/intake-form/docs/demo.html](https://www.bobspunt.com/intake-form/docs/demo.html) — one self-contained file showing every question type. Or open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) locally.</sub>
 
 ## Why this exists
 
