@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] — 2026-09-22
+
+### Added
+
+- **`tools/reach-test.mjs` — a reachability gate.** `render-test.mjs`, the golden
+  exports, and `axe-audit.mjs` all verify *rendering*; none verify *reachability*.
+  Twice a feature shipped complete in CSS, schema, docs, and goldens while remaining
+  unreachable in the UI, passing every gate: `kraft`/`studio` were missing from
+  `THEME_PRESETS` in v1.2.0, and `narrative-card`/`embedded-media` were filtered out of
+  the sidebar TOC. This script asserts on the controls themselves in a real browser:
+
+  | Assertion | Catches |
+  |---|---|
+  | Every `theme.schema.json` preset enum value has a `[data-theme]` block in `ifbase.css` | A documented preset that silently renders as `default` |
+  | Every preset enum value appears in the runtime theme menu | The v1.2.0 `kraft`/`studio` bug |
+  | The theme menu offers no preset the schema disallows | A picker entry a spec cannot legally request |
+  | Every question — display-only types included — has a TOC entry | The `narrative-card`/`embedded-media` bug |
+  | No TOC entry falls back to a raw question id | A developer identifier leaking into the nav |
+  | Display-only types are excluded from each section's answered/total count | Progress counts inflated by unanswerable steps |
+  | The global actions are inside `.topbar` and on-screen at 1440 px and 375 px | A regression back to the sidebar footer that hid below 1100 px |
+
+  Verified by mutation: each of the six defect shapes above was reintroduced and
+  confirmed to fail the gate, then reverted. Visibility means within the viewport and
+  topmost at its own centre, not merely a non-zero box — a control above the fold or
+  behind an overlay counts as unreachable.
+
+- `npm run reach` in `tools/package.json`. Defaults to
+  `examples/question-type-catalog.json`, which exercises every question type; accepts
+  any spec path.
+
 ## [1.3.0] — 2026-09-22
 
 Navigation and chrome release. The global actions move out of the sidebar into a

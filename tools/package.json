@@ -5,7 +5,8 @@
   "description": "Verification harness for the intake-form skill. Not shipped; dev-only.",
   "scripts": {
     "render": "node render-test.mjs",
-    "axe": "node axe-audit.mjs"
+    "axe": "node axe-audit.mjs",
+    "reach": "node reach-test.mjs"
   },
   "dependencies": {
     "playwright": "^1.58.0",

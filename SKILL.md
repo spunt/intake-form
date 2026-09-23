@@ -50,6 +50,7 @@ The template ships with **relative** references (`ifbase.css`, `ifbase.js`), whi
 | `tools/lib/build-form.mjs` | Library: `loadSpec`, `validateSpec`, `validateTheme`, `buildFormHtml`, `writeFormFile`. Import it to build in-process. | Yes |
 | `tools/render-test.mjs <spec> [--out <dir>]` | Headless render check: screenshots, console errors, export text, cold-render timing. | Dev/verification only |
 | `tools/axe-audit.mjs` | Accessibility audit. | Dev/verification only |
+| `tools/reach-test.mjs [<spec>]` | Reachability gate: asserts theme presets are selectable and every question (display types included) has a TOC entry. Run after adding a preset or question type. | Dev/verification only |
 
 **Fallback — hand-edit the template** (only if Node is unavailable):
 

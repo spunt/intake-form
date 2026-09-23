@@ -104,7 +104,9 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 
 ## Quality
 
-The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), and `axe-audit.mjs` (programmatic accessibility audit on both views). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), `axe-audit.mjs` (programmatic accessibility audit on both views), and `reach-test.mjs` (reachability gate: asserts every theme preset is actually selectable and every question — display-only types included — has a navigation entry). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+
+The reachability gate exists because render, golden, and axe checks all verify *rendering* and none verify *reachability* — twice a feature shipped complete in CSS, schema, docs, and goldens while remaining unselectable in the UI, passing every gate.
 
 Current state: 13/13 specs render with zero console errors, and zero axe violations across both layouts and all five theme presets. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 

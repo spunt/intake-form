@@ -58,9 +58,14 @@ are applied at load and are **not** reverted by switching, so a form with heavy
 per-token overrides may look similar across presets — that is expected, because
 palette overrides win over preset values (see **Resolution order** below).
 
-When adding a preset, update **both** `ifbase.css` (the `[data-theme]` block) and
-`THEME_PRESETS` in `ifbase.js`. Shipping only the CSS leaves the preset valid in a spec
-but unreachable from the UI.
+When adding a preset, update **all three** of `theme.schema.json` (the `preset` enum),
+`ifbase.css` (the `[data-theme]` block), and `THEME_PRESETS` in `ifbase.js`. Shipping
+only the CSS leaves the preset valid in a spec but unreachable from the UI; shipping
+only the schema entry leaves a dead enum value that silently renders as `default`.
+
+`node tools/reach-test.mjs` enforces all three, and fails if the picker offers a preset
+the schema disallows. Run it alongside `axe-audit.mjs` after adding a preset — the axe
+audit checks contrast, the reachability gate checks the preset can actually be chosen.
 
 ## Theme block (spec)
 
