@@ -2228,7 +2228,12 @@
   function buildExport(boxId) {
     var el = document.getElementById(boxId);
     if (!el || !SPEC) return;
-    var lines = ['=== ' + (SPEC.exportTitle || 'INTAKE EXPORT') + ' ===', ''];
+    var lines = ['=== ' + (SPEC.exportTitle || 'INTAKE EXPORT') + ' ==='];
+    // Set by tools/build.mjs when it registers the form, so tools/record.mjs can
+    // match this export to its spec.
+    var record = SPEC.record && typeof SPEC.record === 'object' ? SPEC.record : null;
+    if (record && record.id) lines.push('Form id: ' + record.id);
+    lines.push('');
     // Pad to the longest key so values stay column-aligned even with long ids
     // (a fixed 16 made long keys collide with their own value).
     var keyWidth = 16;
@@ -2340,6 +2345,13 @@
       if (flagCount) lines.push(flagCount + ' question(s) flagged as mis-targeted.');
       lines.push('Treat these as evidence about the form, not only about the respondent.');
     }
+    if (record && record.id && record.command) {
+      lines.push('', '--- Record this before acting ---');
+      lines.push('Save this whole export to a file, then run:');
+      lines.push('  ' + record.command + ' <saved-export-file>');
+      lines.push("It files the answers in the project's .decisions/ and in the local");
+      lines.push('intake-form record, so later forms do not re-ask what is decided.');
+    }
     el.textContent = lines.join('\n');
   }
 
@@ -2348,7 +2360,8 @@
     if (q.type === 'radio') {
       if (!val) return '(not answered)';
       if (val === OTHER_VALUE) return otherAnswer(q);
-      var opt = (q.options || []).find(function (o) { return o.value === val; });
+      // resolveOptions, not q.options: the renderer-added "Not sure" has a label too.
+      var opt = resolveOptions(q).find(function (o) { return o.value === val; });
       var base = opt ? opt.label : val;
       // Append conditional if "reveals" option is selected
       if (opt && opt.reveals && q.conditional) {

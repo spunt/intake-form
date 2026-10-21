@@ -3,6 +3,83 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] — 2026-10-21
+
+Record release. Answers no longer die with the session: each project keeps its
+decisions of record, and every interaction, in every project, stays available to
+the next form and to work on improving the skill. Prompted by a usage scan of the
+last ~100 days: 7 forms, 6 of them decision batches, answers kept beside the form for
+only 3 of the 6, in 3 different formats.
+
+### Added
+
+- **`tools/record.mjs`: one command files an answered form.** `record.mjs <export>`
+  (or `-` for stdin) parses the export against its spec and writes two layers:
+  `<project>/.decisions/YYYY-MM-DD-<slug>.md`, human-readable decisions of record
+  (question, answer with Other text, note, the recommendation and whether it was
+  followed, who decided: the respondent, the agent for a `decidedForYou` call nobody
+  reopened, or nobody yet), and the cross-project store (spec, raw export, parsed
+  answers, metadata, plus an `index.jsonl`). Subcommands: `list`, `show <id>`,
+  `search <words>`, `stats` (recommendation calibration by confidence; skip, flag,
+  Other and note rates; departures), `import <form> [--answers <file>]` for forms
+  built elsewhere or earlier, and `where`.
+- **Forms are registered when built.** `build.mjs` assigns a form id, stores the spec
+  as `asked` (a rebuild to the same path is a revision, not a new form) and sets a
+  `record` block in the spec. `--no-record` skips both. Forms that are never answered
+  stay in the store as signal.
+- **The export names its form and how to file it.** A form built by `build.mjs`
+  exports `Form id: <id>` on the line after the header, and ends with a
+  "Record this before acting" block giving the exact `record.mjs` command, so an agent
+  without the skill loaded can still file it. Specs without a `record` block (every
+  existing spec, hand-edited forms) export exactly as before.
+- **`decidedForYou: true`** marks the "tick any you want me to revisit" checkbox, so
+  the record files unticked items as agent calls that stand and ticked ones as reopened.
+- **SKILL.md § Records: consult before, record after.** Before authoring: read
+  `.decisions/` (don't re-ask what's settled), `record.mjs search` for past forms on
+  the topic, `record.mjs stats` to keep confidence labels honest. After answers:
+  record first, then act; point handoffs at `.decisions/`. Two new anti-patterns.
+- **`tools/record-test.mjs` (`npm run record`), 153 checks.** Builds a form, fills it
+  in Chromium (Other with multi-line text, a label containing the ` | ` separator,
+  multi-paragraph notes, a skip with reason, a flag with a note, a branch, a
+  conditional, followed and departed recommendations, an untouched slider, a reordered
+  rank, a decided-for-you list and a form critique), files it with one `record.mjs`
+  command and asserts the parsed answers equal the in-browser state. Pastes with
+  stripped trailing spaces or CRLF line endings must parse identically, as must a
+  pre-v1.4 export with unindented continuation lines. Verified by mutation: 14 defect
+  shapes (among them a shortest-match label split, an off-by-two indent strip, a
+  trimmed note, a lost marker, a missing form id or command, a non-self-ignoring
+  `.decisions/`, the store missing from `.gitignore`, calibration that drops
+  departures) each fail the gate, then were reverted.
+- `test-specs/record-roundtrip.json` and its golden export (pins the form id line and
+  the record footer).
+
+### Privacy
+
+- The store defaults to `<skill-dir>/.records/` in a git checkout of the skill
+  (gitignored here), else `~/.local/state/intake-form/records/`; `INTAKE_FORM_RECORDS`
+  overrides both. A plugin cache is not used, because updates replace it.
+- `.decisions/` ignores itself (`.decisions/.gitignore` is `*`), so a project's
+  decisions stay out of commits without editing its `.gitignore`. A project that
+  already tracks `.decisions/` keeps doing so. Delete that file to commit them.
+- The gate proves both with a real `git add`: in a scratch repo carrying this
+  `.gitignore`, `git add -A` and `git add .records` stage nothing from the store, and
+  nothing under `.records/` or `.decisions/` is tracked in this repo.
+- Nothing is uploaded anywhere. The store can hold work content; SKILL.md says not to
+  copy it into another knowledge base without the owner's yes.
+
+### Fixed
+
+- **An answered "Not sure" exported as `not_sure`.** The export looked the label up in
+  the spec's options, which don't include the renderer-added escape hatch; it now
+  reads `Not sure`. The parser accepts both.
+
+### Compatibility
+
+No existing spec changes behavior. All 14 existing golden exports are byte-identical:
+the form id line and record footer appear only for forms built by `build.mjs` (or
+specs with a `record` block). `record.mjs` and its libraries use Node built-ins only;
+Playwright is needed only for the test harness.
+
 ## [1.4.0] — 2026-10-21
 
 User-centered release. The theme: a question should tell the reader why it matters,

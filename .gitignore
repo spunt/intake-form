@@ -21,3 +21,8 @@ references/prior-art-*.md
 
 # Session handoff docs — local working notes, not part of the published skill
 .handoff/
+
+# intake-form records: local, private interaction history (may hold work content)
+.records/
+# Decisions of record written by tools/record.mjs (self-ignored too; see .decisions/.gitignore)
+.decisions/

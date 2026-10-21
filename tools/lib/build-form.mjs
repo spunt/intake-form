@@ -122,6 +122,7 @@ const OPTION_TYPES = new Set(['radio', 'checkbox', 'segmented']);
 const CONFIDENCE_LEVELS = new Set(['high', 'medium', 'low']);
 const RECOMMENDATION_KEYS = new Set(['value', 'confidence', 'because', 'risk']);
 const OTHER_VALUE = '__other__';
+export const FORM_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 
 function validateRecommendation(q, where, errors) {
   const r = q.recommendation;
@@ -163,7 +164,7 @@ function validateRecommendation(q, where, errors) {
 
 // Walk every question in the spec, including branch sub-questions, yielding
 // { question, sectionName, viaBranch }. Order matches render order.
-function* iterQuestions(spec) {
+export function* iterQuestions(spec) {
   const sections = Array.isArray(spec?.sections) ? spec.sections : [];
   for (const section of sections) {
     const name = section?.name;
@@ -199,6 +200,19 @@ export function validateSpec(spec) {
   }
   if ('commentaryMaxLength' in spec) {
     warnings.push('spec.commentaryMaxLength is ignored: commentary has no character limit (since v1.4.0)');
+  }
+  if ('record' in spec) {
+    const r = spec.record;
+    if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+      errors.push('spec.record must be an object ({ id, command }); tools/build.mjs sets it');
+    } else {
+      if (typeof r.id !== 'string' || !FORM_ID_RE.test(r.id)) {
+        errors.push(`spec.record.id must match ${FORM_ID_RE} (letters, digits, . _ -), got ${JSON.stringify(r.id)}`);
+      }
+      if ('command' in r && (typeof r.command !== 'string' || !r.command.trim())) {
+        errors.push('spec.record.command must be a non-empty string when present');
+      }
+    }
   }
   const seenIds = new Map();
   for (const { question: q, viaBranch } of iterQuestions(spec)) {
@@ -270,6 +284,13 @@ export function validateSpec(spec) {
     }
     if ('commentaryMaxLength' in q) {
       warnings.push(`${where}: commentaryMaxLength is ignored: commentary has no character limit (since v1.4.0)`);
+    }
+    if ('decidedForYou' in q) {
+      if (typeof q.decidedForYou !== 'boolean') {
+        errors.push(`${where}: decidedForYou must be true or false`);
+      } else if (q.decidedForYou && q.type !== 'checkbox') {
+        errors.push(`${where}: decidedForYou is only valid on a checkbox question (the "tick any you want me to revisit" list)`);
+      }
     }
     if (typeof q.inferenceBox === 'string' && /\brecommend/i.test(q.inferenceBox)) {
       warnings.push(`${where}: inferenceBox reads like a recommendation; use the recommendation field ({ value, confidence, because }) so it renders as one`);

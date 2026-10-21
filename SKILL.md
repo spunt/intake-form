@@ -31,6 +31,8 @@ The template ships with **relative** references (`ifbase.css`, `ifbase.js`), whi
 
 ## Authoring procedure
 
+**Before you write a single question, read the record** (§ Records: consult before, record after). Don't re-ask what this project has decided, and set recommendation confidence from how often past recommendations were followed.
+
 **Preferred — build with the bundled CLI.** The skill ships a builder that substitutes the spec, validates it, and writes a self-contained form. Use it instead of hand-editing `template.html`; every agent that hand-rolls the substitution writes a slightly different one, which is the duplication this skill exists to prevent.
 
 1. Decide your sections + questions.
@@ -40,16 +42,19 @@ The template ships with **relative** references (`ifbase.css`, `ifbase.js`), whi
    node <skill-dir>/tools/build.mjs spec.json --out path/to/form.html
    ```
    `<skill-dir>` is this skill's install directory. `--out` is relative to the current working directory (see § Save path). The default `--assets inline` embeds `ifbase.css`/`ifbase.js` into the HTML, so the form is one portable file that opens anywhere — no dependence on where the skill lives. A bad spec (unknown question type, duplicate id, malformed theme) fails here with a clear message, not silently in the browser.
-4. Tell the user the full path.
+4. Tell the user the full path. The build also registers the form in the local record and prints its form id.
+5. When the answers come back, **record them before acting on them** (§ Records).
 
 **Tools reference:**
 
 | File | Role | Agent-facing? |
 |---|---|---|
-| `tools/build.mjs <spec> --out <path>` | Build a form to any path. `--assets inline\|absolute\|relative`, `--theme`, `--hue`. | Yes — the authoring entry point |
+| `tools/build.mjs <spec> --out <path>` | Build a form to any path. `--assets inline\|absolute\|relative`, `--theme`, `--hue`. Registers the form in the record; `--no-record` skips that (demos, forms built for someone else). | Yes — the authoring entry point |
+| `tools/record.mjs <export-file>` | File an answered form: writes `<project>/.decisions/<date>-<slug>.md` and the store record. Also `list`, `show <id>`, `search <words>`, `stats`, `import`, `where`. | Yes — after every answered form |
 | `tools/lib/build-form.mjs` | Library: `loadSpec`, `validateSpec`, `validateTheme`, `buildFormHtml`, `writeFormFile`. Import it to build in-process. | Yes |
 | `tools/render-test.mjs <spec> [--out <dir>]` | Headless render check: screenshots, console errors, export text, cold-render timing. | Dev/verification only |
 | `tools/axe-audit.mjs` | Accessibility audit. | Dev/verification only |
+| `tools/record-test.mjs` | Record gate: browser round trip (export → record.mjs → answers equal the in-browser state), `.decisions/` content, and real-`git add` checks that the store can't be committed. | Dev/verification only |
 | `tools/reach-test.mjs [<spec>]` | Reachability gate: asserts theme presets are selectable and every question (display types included) has a TOC entry. Run after adding a preset or question type. | Dev/verification only |
 
 **Fallback — hand-edit the template** (only if Node is unavailable):
@@ -81,7 +86,7 @@ Save relative to the **current working directory**, in a sensible folder (e.g. `
 |---|---|
 | Blocker | Ask in form |
 | High-value | Ask in form |
-| Decidable by you: high confidence and easy to undo | Decide it, then show it. List these calls as the options of one checkbox question, "I decided these without asking. Tick any you want me to revisit; unticked ones stand.", and repeat them in `knownContext` so the agent reading the export knows what was decided. (`knownContext` alone is export-only: the reader never sees it, so they could not object.) |
+| Decidable by you: high confidence and easy to undo | Decide it, then show it. List these calls as the options of one checkbox question, "I decided these without asking. Tick any you want me to revisit; unticked ones stand.", mark it `"decidedForYou": true` (so the record files unticked calls as agent decisions that stand), and repeat them in `knownContext` so the agent reading the export knows what was decided. (`knownContext` alone is export-only: the reader never sees it, so they could not object.) |
 | Assumable | Assume in `knownContext` with a stated default |
 | Deferrable | Note in routing as deferred |
 
@@ -130,6 +135,7 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
   "sourcesLabel": "string — heading above the sources list. Default 'Background material'",
   "other":       true,             // optional; false removes the automatic "Other" choice form-wide
   "otherLabel":  "string (optional) — form-wide label for the automatic Other choice",
+  // "record": { "id": "…", "command": "…" }  — set by tools/build.mjs; don't write it by hand
 
   "theme": {
     "preset":   "default | editorial | terminal | kraft | studio",   // optional; default = 'default'
@@ -172,6 +178,7 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
           },
           "required":  true,              // advisory only — every question is skippable
           "kind":      "factual | judgment",  // radio: controls the auto "Not sure" option
+          "decidedForYou": true,          // checkbox only: the "tick any you want me to revisit" list (§ Gap triage)
           "other":     false,             // optional; removes the automatic "Other" choice (radio/checkbox/segmented)
           "otherLabel": "string (optional) — label for the automatic Other choice",
           "tocLabel":  "string (optional) — shorter label for the sidebar TOC",
@@ -526,6 +533,27 @@ Before including a question, ask: **does the answer change what gets built?**
 
 When in doubt, ask the higher-altitude question and let commentary carry the detail.
 
+## Records: consult before, record after
+
+Every form and every answer is kept, so the next form, in this project or any other, starts from what was already asked and decided. Two layers, both written by one command:
+
+- **`<project>/.decisions/YYYY-MM-DD-<slug>.md`** — this project's decisions of record: each question, the answer (Other text included), the note, the recommendation and whether it was followed, and who decided (the respondent; the agent, for a `decidedForYou` call nobody reopened; or nobody yet, for a skipped question). The folder ignores itself (`.decisions/.gitignore` is `*`), so it stays local unless the owner deletes that file. Search tools that respect `.gitignore` will not see it: read it directly (`ls .decisions/`).
+- **The store** — every interaction across projects: spec, raw export, parsed answers and metadata. `node <skill-dir>/tools/record.mjs where` prints its location: `$INTAKE_FORM_RECORDS` if set, else `<skill-dir>/.records/` in a git checkout of the skill (gitignored), else `~/.local/state/intake-form/records/`. It can hold work content: never commit it, upload it, or copy it into another knowledge base without the owner's yes.
+
+**Before authoring:**
+
+1. `ls <project>/.decisions/` and read the entries that touch this work. A decision written there is settled: don't ask it again; restate it in `knownContext`. Reopen it only with new evidence, and say what changed in the question's `why`.
+2. `node <skill-dir>/tools/record.mjs search <topic words>` finds past forms, any project, that asked about the same thing; read how they were answered (`record.mjs show <form-id>`).
+3. `node <skill-dir>/tools/record.mjs stats` shows how often the respondent followed high, medium and low recommendations. If high-confidence calls are often overruled, claim less confidence; the label is a promise.
+
+**After the answers come back** (the export ends with a "Record this before acting" block naming the exact command):
+
+1. Save the export verbatim to a file and run `node <skill-dir>/tools/record.mjs <file>` (or pipe it in with `-`). The `Form id:` line ties it to the registered spec; for a form built before v1.5.0 add `--form <form.html>`.
+2. Read what it prints. A `FORM_CRITIQUE` still comes first (§ Meta-feedback); parser warnings mean something in the export did not match the spec, so check the decisions file before relying on it.
+3. Point handoffs and plans at the `.decisions/` file instead of restating the answers.
+
+Never write `.decisions/` into a project you were not asked to work in; `record.mjs import` adds old forms to the store only.
+
 ## Meta-feedback: letting the user say the form is wrong
 
 Two channels, both automatic — no spec needed.
@@ -639,6 +667,7 @@ The renderer produces the export when the user clicks "Copy for Claude". It auto
 
 ```
 === INTAKE EXPORT ===
+Form id: 2026-10-21-release-plan-3f9a1c      (only for forms built by tools/build.mjs)
 
 QUESTION_ID:     value (with conditional appended if reveals option chosen)
 MULTI_FIELD:     val1 | val2
@@ -651,6 +680,10 @@ DEPARTED:        Chosen label   [≠ recommended: Recommended label (medium conf
 
 --- Routing suggestion ---
 ask.reason_fork       -> route to a structured decision workflow with FORK_FACTOR as the primary axis
+
+--- Record this before acting ---
+Save this whole export to a file, then run:
+  node "<skill-dir>/tools/record.mjs" <saved-export-file>
 ```
 
 When a spec has recommendations, the export's "How to read this" block adds a line: a
@@ -692,5 +725,7 @@ If you genuinely need custom export logic, override `window.buildExport(boxId)` 
 - **Hand-adding an "Other (specify)" option** — the renderer adds one to every closed question.
 - **Padding the form with low-altitude questions** — see § Question altitude.
 - **Asking about assumable gaps** — assume with stated default in `knownContext` instead.
+- **Re-asking a decision of record** — check `.decisions/` and `record.mjs search` first.
+- **Acting on answers before recording them** — run `record.mjs` first; an unrecorded answer is gone when the session ends.
 - **Inlining CSS/JS or modifying the template HTML** — use the skill's files via absolute path.
 - **Editing template.html itself for a one-off form** — the template is canonical. If you need new behavior, change `ifbase.js` once and benefit forever.

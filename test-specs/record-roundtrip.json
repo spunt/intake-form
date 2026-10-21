@@ -1,0 +1,270 @@
+{
+  "title": "Record round-trip",
+  "subtitle": "Covers every answer shape tools/record.mjs must read back.",
+  "exportTitle": "ROUND TRIP EXPORT",
+  "record": {
+    "id": "2026-10-21-record-roundtrip-golden",
+    "command": "node \"tools/record.mjs\""
+  },
+  "sections": [
+    {
+      "name": "Choices",
+      "questions": [
+        {
+          "id": "pick_rec",
+          "type": "radio",
+          "label": "Which store location?",
+          "why": "Every later form reads this record.",
+          "stakes": "Picking wrong means records get wiped on update.",
+          "kind": "judgment",
+          "options": [
+            {
+              "value": "skill",
+              "label": "Inside the skill checkout"
+            },
+            {
+              "value": "state",
+              "label": "In ~/.local/state"
+            }
+          ],
+          "recommendation": {
+            "value": "skill",
+            "confidence": "high",
+            "because": "It matches the request literally."
+          }
+        },
+        {
+          "id": "pick_dep",
+          "type": "radio",
+          "label": "How should exports name their form?",
+          "kind": "judgment",
+          "options": [
+            {
+              "value": "id",
+              "label": "A form id line"
+            },
+            {
+              "value": "title",
+              "label": "Title plus question ids"
+            }
+          ],
+          "recommendation": {
+            "value": "id",
+            "confidence": "medium",
+            "because": "Titles collide."
+          }
+        },
+        {
+          "id": "reveal",
+          "type": "radio",
+          "label": "Where should decisions live?",
+          "kind": "judgment",
+          "options": [
+            {
+              "value": "decisions",
+              "label": ".decisions/ folder"
+            },
+            {
+              "value": "elsewhere",
+              "label": "Somewhere else",
+              "reveals": true
+            }
+          ],
+          "conditional": {
+            "id": "reveal_where",
+            "label": "Where?",
+            "placeholder": "path"
+          }
+        },
+        {
+          "id": "branchy",
+          "type": "radio",
+          "label": "Backfill old forms?",
+          "kind": "judgment",
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "branch": {
+                "id": "branch_which",
+                "type": "text",
+                "label": "Which ones first?"
+              }
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ]
+        },
+        {
+          "id": "multi",
+          "type": "checkbox",
+          "label": "Which views ship?",
+          "options": [
+            {
+              "value": "list",
+              "label": "list | show"
+            },
+            {
+              "value": "search",
+              "label": "search"
+            },
+            {
+              "value": "stats",
+              "label": "stats > calibration"
+            }
+          ],
+          "recommendation": {
+            "value": [
+              "list",
+              "search"
+            ],
+            "confidence": "low",
+            "because": "Stats is secondary."
+          }
+        },
+        {
+          "id": "decided",
+          "type": "checkbox",
+          "label": "I decided these without asking. Tick any you want me to revisit; unticked ones stand.",
+          "decidedForYou": true,
+          "options": [
+            {
+              "value": "gitignore",
+              "label": "Decisions are gitignored by default"
+            },
+            {
+              "value": "jsonl",
+              "label": "The index is JSONL"
+            },
+            {
+              "value": "nopush",
+              "label": "Nothing is pushed"
+            }
+          ]
+        },
+        {
+          "id": "seg",
+          "type": "segmented",
+          "label": "How strict is the gate?",
+          "options": [
+            {
+              "value": "warn",
+              "label": "Warn"
+            },
+            {
+              "value": "fail",
+              "label": "Fail"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Shapes",
+      "questions": [
+        {
+          "id": "sc",
+          "type": "scale",
+          "label": "How confident are you?",
+          "labels": [
+            "Not at all",
+            "Slightly",
+            "Moderately",
+            "Very",
+            "Completely"
+          ]
+        },
+        {
+          "id": "sl",
+          "type": "slider",
+          "label": "Budget (hours)",
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "id": "rank",
+          "type": "priority-rank",
+          "label": "Rank the layers",
+          "options": [
+            {
+              "value": "decisions",
+              "label": "Decisions"
+            },
+            {
+              "value": "store",
+              "label": "Store"
+            },
+            {
+              "value": "stats",
+              "label": "Stats"
+            }
+          ]
+        },
+        {
+          "id": "txt",
+          "type": "text",
+          "label": "A short answer"
+        },
+        {
+          "id": "essay",
+          "type": "textarea",
+          "label": "Anything else?"
+        },
+        {
+          "id": "skipme",
+          "type": "radio",
+          "label": "Which records home?",
+          "kind": "factual",
+          "options": [
+            {
+              "value": "a",
+              "label": "A"
+            },
+            {
+              "value": "b",
+              "label": "B"
+            }
+          ]
+        },
+        {
+          "id": "flagme",
+          "type": "radio",
+          "label": "How many forms exist?",
+          "kind": "factual",
+          "options": [
+            {
+              "value": "seven",
+              "label": "Seven"
+            },
+            {
+              "value": "eight",
+              "label": "Eight"
+            }
+          ]
+        },
+        {
+          "id": "unans",
+          "type": "radio",
+          "label": "Left blank on purpose",
+          "kind": "judgment",
+          "options": [
+            {
+              "value": "x",
+              "label": "X"
+            },
+            {
+              "value": "y",
+              "label": "Y"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "knownContext": [
+    "Decided without asking: decisions are gitignored, the index is JSONL, nothing is pushed."
+  ]
+}

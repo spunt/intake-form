@@ -1,0 +1,38 @@
+=== ROUND TRIP EXPORT ===
+Form id: 2026-10-21-record-roundtrip-golden
+
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+4. [= recommended] / [≠ recommended] compare an answer with the
+   recommendation the form offered. A departure from a high-confidence
+   recommendation means the recommender misjudged something: find out
+   what before relying on its other assumptions.
+
+PICK_REC:       (not answered)
+PICK_DEP:       (not answered)
+REVEAL:         (not answered)
+BRANCHY:        (not answered)
+MULTI:          (none)
+DECIDED:        (none)
+SEG:            (not answered)
+SC:             (not answered)
+SL:             0   [UNTOUCHED DEFAULT — not confirmed by respondent]
+RANK:           Decisions > Store > Stats   [UNTOUCHED DEFAULT — not confirmed by respondent]
+TXT:            (not answered)
+ESSAY:          (not answered)
+SKIPME:         (not answered)
+FLAGME:         (not answered)
+UNANS:          (not answered)
+
+--- Context already known ---
+Decided without asking: decisions are gitignored, the index is JSONL, nothing is pushed.
+
+--- Record this before acting ---
+Save this whole export to a file, then run:
+  node "tools/record.mjs" <saved-export-file>
+It files the answers in the project's .decisions/ and in the local
+intake-form record, so later forms do not re-ask what is decided.

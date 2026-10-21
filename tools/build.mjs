@@ -2,6 +2,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { loadSpec, buildFormHtml } from './lib/build-form.mjs';
+import { registerForm } from './lib/records.mjs';
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -15,6 +16,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--assets=')) args.assets = a.slice('--assets='.length);
     else if (a.startsWith('--theme='))  args.theme = a.slice('--theme='.length);
     else if (a.startsWith('--hue='))    args.hue = Number(a.slice('--hue='.length));
+    else if (a === '--no-record') args.noRecord = true;
     else if (a === '--help' || a === '-h') args.help = true;
     else if (!a.startsWith('--'))          args._.push(a);
   }
@@ -23,7 +25,7 @@ function parseArgs(argv) {
 
 function usage() {
   console.error([
-    'usage: build.mjs <spec.json> --out <path/to/form.html> [--assets inline|absolute|relative] [--theme <preset>] [--hue <0-360>]',
+    'usage: build.mjs <spec.json> --out <path/to/form.html> [--assets inline|absolute|relative] [--theme <preset>] [--hue <0-360>] [--no-record]',
     '',
     'Builds a form from a JSON spec and writes it to --out. The spec is validated',
     'first (structure + theme); a bad spec fails here instead of in the browser.',
@@ -31,6 +33,10 @@ function usage() {
     '--assets inline   (default) embed ifbase.css/js — one self-contained, portable file',
     '--assets absolute absolute file:// URLs at the skill root (this machine only)',
     '--assets relative leave relative refs (works only beside the skill files)',
+    '',
+    'The form is registered in the local intake-form record (see record.mjs where),',
+    'and its export names a form id plus the record.mjs command that files the',
+    'answers. --no-record skips both (demos, tests, forms for someone else).',
   ].join('\n'));
 }
 
@@ -51,6 +57,17 @@ try {
   process.exit(1);
 }
 
+let formId = null;
+if (args.noRecord) {
+  delete spec.record;
+} else {
+  try {
+    ({ id: formId, spec } = await registerForm(spec, { outPath }));
+  } catch (err) {
+    console.warn(`[build] warning: could not register the form in the record (${err.message}); building without it`);
+  }
+}
+
 const html = await buildFormHtml(spec, {
   assets: args.assets || 'inline',
   theme: args.theme,
@@ -60,3 +77,4 @@ const html = await buildFormHtml(spec, {
 await mkdir(dirname(outPath), { recursive: true });
 await writeFile(outPath, html, 'utf8');
 console.log(`[build] OK  wrote ${outPath}  (${(html.length / 1024).toFixed(0)} KB, assets=${args.assets || 'inline'})`);
+if (formId) console.log(`[build] form id ${formId}: after the answers come back, save the export and run node tools/record.mjs <file>`);

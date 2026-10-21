@@ -67,6 +67,27 @@ Treat these as evidence about the form, not only about the respondent.
 When the reviewer says the form itself is wrong, a `FORM_CRITIQUE` block leads the
 export and tells the consuming agent to regenerate rather than proceed.
 
+## Answers that outlast the session
+
+A form built with `tools/build.mjs` gets a form id, and its export ends with the one
+command that files it:
+
+```bash
+node tools/record.mjs answers.txt
+```
+
+That writes the project's decisions of record to `.decisions/YYYY-MM-DD-<slug>.md`
+(question, answer, note, the recommendation and whether it was followed, and who
+decided) and keeps the whole interaction in a local store shared by every project on
+the machine. Before writing the next form, an agent reads `.decisions/` so it doesn't
+re-ask what's settled, runs `record.mjs search <topic>` to find past forms on the same
+subject, and checks `record.mjs stats` to see how often its high-, medium- and
+low-confidence recommendations were followed.
+
+Both layers stay local: `.decisions/` ignores itself, and the store lives in the
+skill's gitignored `.records/` (or `~/.local/state/intake-form/records`, or
+`$INTAKE_FORM_RECORDS`). Nothing is uploaded. `--no-record` builds without any of it.
+
 ## Quick start
 
 There is no install step for the form itself — it's a template plus a renderer.
@@ -107,7 +128,7 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 
 ## Quality
 
-The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render and warning about ignored fields), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), `axe-audit.mjs` (programmatic accessibility audit on both views), and `reach-test.mjs` (reachability gate: asserts every theme preset is actually selectable, every question — display-only types included — has a navigation entry, every why/stakes/recommendation is shown before its options at body size, every closed question's Other choice works end to end, and no answer box is capped without a stated reason). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render and warning about ignored fields), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), `axe-audit.mjs` (programmatic accessibility audit on both views), `record-test.mjs` (fills a form in a real browser, files the export with `record.mjs`, and asserts the parsed answers equal the in-browser state; also checks with a real `git add` that neither the store nor `.decisions/` can be committed), and `reach-test.mjs` (reachability gate: asserts every theme preset is actually selectable, every question — display-only types included — has a navigation entry, every why/stakes/recommendation is shown before its options at body size, every closed question's Other choice works end to end, and no answer box is capped without a stated reason). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
 
 The reachability gate exists because render, golden, and axe checks all verify *rendering* and none verify *reachability* — twice a feature shipped complete in CSS, schema, docs, and goldens while remaining unselectable in the UI, passing every gate.
 
