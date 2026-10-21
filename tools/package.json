@@ -7,7 +7,8 @@
     "render": "node render-test.mjs",
     "axe": "node axe-audit.mjs",
     "reach": "node reach-test.mjs",
-    "record": "node record-test.mjs"
+    "record": "node record-test.mjs",
+    "demo-gif": "node demo-gif.mjs"
   },
   "dependencies": {
     "playwright": "^1.58.0",

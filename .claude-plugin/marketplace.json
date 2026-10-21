@@ -8,7 +8,7 @@
     {
       "name": "intake-form",
       "source": "./",
-      "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export. Nothing is pre-selected, every question can be skipped with a reason, and the reviewer can tell you the form itself asked the wrong questions."
+      "description": "Turn a batch of decisions or an underspecified request into a standalone HTML form from a JSON spec. Each question can say why it matters, what is at stake and what the agent recommends; the answers come back as an agent-ready export and are filed as the project's decisions of record. Nothing is pre-selected, every question can be skipped with a reason, and the reviewer can tell you the form itself asked the wrong questions."
     }
   ]
 }

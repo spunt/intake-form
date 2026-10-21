@@ -1,6 +1,6 @@
 ---
 name: intake-form
-description: Use when a project request, task, or prompt is underspecified — missing goal, scope, success criteria, stakeholders, or constraints. Generates a standalone HTML intake or clarification form that collects structured information from a human and exports a Claude-ready payload. Triggers on vague requests, incomplete specs, when "what are we building?" cannot be answered, or explicit phrases like "draft an intake form", "spin up a clarification form", "get a brief from the user", "gather requirements before starting".
+description: Use when a human must answer several things before work can go on — a batch of decisions to make or approve, or a request missing its goal, scope, success criteria, stakeholders or constraints. Builds a standalone HTML form from a JSON spec in which each question can say why it matters, what is at stake and what the agent recommends; returns an agent-ready export and files the answers as the project's decisions of record. Triggers on several open decisions or questions for the user at once, vague requests, when "what are we building?" cannot be answered, or phrases like "put these decisions in a form", "draft an intake form", "get a brief from the user", "gather requirements before starting". Not for a single quick question; ask that inline.
 ---
 
 # Intake Form

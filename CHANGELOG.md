@@ -72,6 +72,27 @@ only 3 of the 6, in 3 different formats.
 - Nothing is uploaded anywhere. The store can hold work content; SKILL.md says not to
   copy it into another knowledge base without the owner's yes.
 
+### Changed
+
+- **The skill description leads with how the skill is actually used.** It now
+  triggers on a batch of decisions to make or approve as well as on underspecified
+  requests, says each question can carry why, stakes and a recommendation, says the
+  answers are filed as decisions of record, and excludes a single quick question.
+  `SKILL.md` and both `.claude-plugin/*.json` descriptions changed together. A
+  routing check before the change, with fresh agents choosing among this skill and
+  five neighbours (clarity-of-purpose, decision-router, buy-in, brainstorming,
+  writing-plans) for 10 prompts, 2 runs per description: decision-batch prompts went
+  to this skill 6 of 6 times (was 2 of 6, lost to decision-router and buy-in), vague
+  requests 5 of 6 (was 4 of 6), and the 4 off-target prompts 0 of 8 (was 0 of 8).
+  A small sample; it shows no regression, not a measured improvement.
+- **`docs/demo.gif` shows the decision flow** (it showed v1.3): a recommendation
+  with its confidence, a recommended checkbox pair, an Other answer in the
+  respondent's words, and the export's "Record this before acting" footer. New
+  `tools/demo-gif.mjs` (`npm run demo-gif`, needs ffmpeg) regenerates it from
+  `test-specs/decision-brief.json` with a scratch record store.
+- `docs/demo.html` and `examples/question-type-catalog.html` rebuilt on the v1.5
+  runtime (`--no-record`, so neither carries a form id).
+
 ### Fixed
 
 - **An answered "Not sure" exported as `not_sure`.** The export looked the label up in

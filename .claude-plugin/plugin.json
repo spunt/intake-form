@@ -1,7 +1,7 @@
 {
   "name": "intake-form",
   "version": "1.5.0",
-  "description": "Generate a standalone HTML intake/clarification form from a JSON spec and get back an agent-ready export. Use when a request is underspecified and a human needs to fill the gaps before work begins.",
+  "description": "Turn a batch of decisions or an underspecified request into a standalone HTML form from a JSON spec. Each question can say why it matters, what is at stake and what the agent recommends; the answers come back as an agent-ready export and are filed as the project's decisions of record.",
   "author": {
     "name": "Bob Spunt",
     "url": "https://github.com/spunt"

@@ -1,10 +1,10 @@
 # Intake Form
 
-**Turn an underspecified request into a clean, native-feeling HTML form by filling in one JSON spec — no form HTML by hand, no backend, no build step.** The reviewer fills it out in the browser and clicks **Copy for Claude**; you get back a structured, agent-ready payload.
+**Turn a batch of decisions or an underspecified request into a clean, native-feeling HTML form by filling in one JSON spec — no form HTML by hand, no backend, no build step.** The reviewer fills it out in the browser and clicks **Copy for Claude**; you get back a structured, agent-ready payload.
 
-![Stepping through the wizard: selecting a radio option and a checkbox, then advancing to a labeled scale question, with the sidebar marking each answered question as the reviewer progresses](docs/demo.gif)
+![Answering a decision brief: each question shows why it matters, what is at stake and the agent's recommendation with its confidence; the reviewer takes the recommended option, ticks two recommended checkboxes, answers the third question with Other in their own words, then opens Review & export, whose export ends with the command that files the answers as decisions of record](docs/demo.gif)
 
-<sub>Answering steps through one question at a time; the sidebar tracks status live, and every question can be skipped or flagged. **Try it live:** [www.bobspunt.com/intake-form/docs/demo.html](https://www.bobspunt.com/intake-form/docs/demo.html) — one self-contained file showing every question type. Or open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) locally.</sub>
+<sub>Each decision says why it matters, what is at stake and what the agent recommends; every closed question has an Other answer, and every question can be skipped or flagged. The export names the form and ends with the one command that files the answers as the project's decisions of record. **Try it live:** [www.bobspunt.com/intake-form/docs/demo.html](https://www.bobspunt.com/intake-form/docs/demo.html) — one self-contained file showing every question type. Or open [`examples/question-type-catalog.html`](examples/question-type-catalog.html) locally.</sub>
 
 ## Why this exists
 
@@ -132,12 +132,13 @@ The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the author
 
 The reachability gate exists because render, golden, and axe checks all verify *rendering* and none verify *reachability* — twice a feature shipped complete in CSS, schema, docs, and goldens while remaining unselectable in the UI, passing every gate.
 
-Current state: 15/15 test specs render with zero console errors and zero axe violations across both layouts, each in its own theme preset. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
+Current state: all 16 test specs and the catalog render with zero console errors and zero axe violations across both layouts, each in its own theme preset. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 
 ```bash
 cd tools && npm install
 node render-test.mjs ../test-specs/demo-all.json
 node axe-audit.mjs ../test-specs/demo-all.json
+node demo-gif.mjs        # regenerates docs/demo.gif (needs ffmpeg)
 ```
 
 ## License
