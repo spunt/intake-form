@@ -148,6 +148,14 @@ export async function loadForm(id) {
   return { meta, spec, answers, dir };
 }
 
+// A new id that collides with a different form gets a numeric suffix, so an
+// answered record is never overwritten by a later form.
+async function uniqueId(store, base) {
+  let id = base;
+  for (let n = 2; await exists(join(store, 'forms', id)); n++) id = `${base}-${n}`;
+  return id;
+}
+
 // Called by build.mjs before it renders: assigns a form id (reusing the id of an
 // unanswered form built to the same path, so a rebuild is a revision rather than
 // a new form) and returns the spec with `record` set.
@@ -157,7 +165,7 @@ export async function registerForm(spec, { outPath, cwd = process.cwd(), source 
   const project = source === 'import' ? resolve(cwd) : projectRoot(dirname(absOut));
   const metas = await listMetas();
   const prior = metas.filter((m) => m.out === absOut && (m.status === 'asked' || m.formId === wantId)).pop();
-  const id = prior ? prior.formId : (wantId || makeFormId({ outPath: absOut, date }));
+  const id = prior ? prior.formId : (wantId || await uniqueId(store, makeFormId({ outPath: absOut, date })));
   const dir = formDir(store, id);
   await mkdir(dir, { recursive: true });
   const now = new Date().toISOString();
@@ -221,7 +229,13 @@ export async function recordExport(text, opts = {}) {
       : 'this export has no "Form id:" line (built before v1.5.0 or without build.mjs); pass --form <form.html|spec.json>');
   }
   const parsed = parseExport(text, spec);
-  const id = formId || makeFormId({ outPath: opts.formPath || spec.title || 'form', slugSource: opts.slug || spec.title });
+  let id = formId;
+  if (!id) {
+    // No form id (pre-v1.5 export): reuse the record of the same form file, else a new id.
+    const same = opts.formPath && (await listMetas()).find((m) => m.out === resolve(opts.formPath));
+    id = same ? same.formId : await uniqueId(store, makeFormId({ outPath: opts.formPath || spec.title || 'form', slugSource: opts.slug || spec.title }));
+    if (same) meta = same;
+  }
   const now = new Date();
   const project = resolve(opts.project || (meta && meta.project) || projectRoot(process.cwd()));
   meta = {
@@ -256,16 +270,21 @@ export async function recordExport(text, opts = {}) {
   await writeFile(exportFile, text);
   if (!(await exists(join(dir, 'spec.json')))) await writeFile(join(dir, 'spec.json'), JSON.stringify(spec, null, 2));
   await writeFile(join(dir, 'answers.json'), JSON.stringify(parsed, null, 2));
-  if (decisionsPath) {
-    await writeDecisionsFile(decisionsPath, md);
-    meta.decisionsFile = decisionsPath;
+  let decisionsFile = decisionsPath;
+  if (decisionsFile) {
+    // Never overwrite another form's decisions: same-day, same-name forms get the id's hash.
+    let other = null;
+    try { other = await readFile(decisionsFile, 'utf8'); } catch {}
+    if (other !== null && !other.includes(`\`${id}\``)) decisionsFile = decisionsFile.replace(/\.md$/, `-${id.split('-').pop()}.md`);
+    await writeDecisionsFile(decisionsFile, md);
+    meta.decisionsFile = decisionsFile;
   }
   await writeFile(join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
   await appendIndex(store, {
     ts: now.toISOString(), event: 'answered', formId: id, title: meta.title, project,
-    decisionsFile: decisionsPath, warnings: parsed.warnings.length, ...summary,
+    decisionsFile, warnings: parsed.warnings.length, ...summary,
   });
-  return { id, meta, parsed, decisionsPath, exportFile, store };
+  return { id, meta, parsed, decisionsPath: decisionsFile, exportFile, store };
 }
 
 // The folder ignores itself, so decisions stay out of commits without editing the

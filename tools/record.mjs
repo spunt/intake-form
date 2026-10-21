@@ -89,10 +89,15 @@ async function cmdImport(args) {
   const abs = resolve(formPath);
   const date = args.date || localDate((await fileMtime(abs)) || new Date());
   const project = resolve(args.project || projectRoot(dirname(abs)));
+  const already = (await listMetas()).find((m) => m.out === abs);
+  if (already && !args.answers) {
+    console.log(`[record] already in the store as ${already.formId} (${already.status}); nothing imported`);
+    return;
+  }
   if (args.answers) {
     const text = await readFile(args.answers, 'utf8');
     const answeredAt = args['answered-at'] || ((await fileMtime(resolve(args.answers))) || new Date()).toISOString();
-    const formId = spec.record && spec.record.id ? spec.record.id : makeFormId({ outPath: abs, date });
+    const formId = spec.record && spec.record.id ? spec.record.id : (already ? already.formId : makeFormId({ outPath: abs, date }));
     try {
       const res = await recordExport(text, {
         spec, formId, formPath: abs, project, decisions: !!args.decisions, source: 'import', answeredAt,

@@ -82,7 +82,7 @@ const TEXT = {
   branch: 'The work ones: they matter most',
   multiOther: 'show | where\nand a second line',
   txt: 'hello: world | not a key',
-  essay: 'para one\n\npara two\n  indented line\nKEY_LIKE: not a new key\n--- Context already known ---',
+  essay: 'para one\n\npara two\n  indented line\nKEY_LIKE: not a new key\n--- Context already known ---\n',
   flagNote: 'Ask about the backfill instead\nnot the count',
   critique: 'Mostly right, but too many questions.\n\nCut the shapes section.',
 };
@@ -105,6 +105,8 @@ await page.locator(`${Q('sc')} .scale-btn[data-scale-val="4"]`).first().click();
 await page.locator(`${Q('rank')} button[aria-label="Move Decisions down"]`).first().click();
 await page.fill(`${Q('txt')} input[data-qid="txt"]`, TEXT.txt);
 await page.fill(`${Q('essay')} textarea[data-qid="essay"]`, TEXT.essay);
+await page.locator(`${Q('attach')} input[type="file"]`).first().setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('old notes\nKEY: not a key\n') });
+await page.waitForFunction(() => !!window.state.attach);
 await page.locator(`${Q('skipme')} .skip-btn`).first().click();
 await page.locator(`${Q('skipme')} .skip-reason-btn[data-reason="dont_know"]`).first().click();
 await pick('flagme', 'not_sure');
@@ -170,7 +172,12 @@ for (const { q, branch, parent, opt } of allQs) {
     const untouched = (q.type === 'slider' || q.type === 'priority-rank') && !browserState.touched[q.id];
     const want = untouched ? 'untouched' : empty ? 'unanswered' : 'answered';
     check(a.status === want, `"${q.id}": status ${want}`, a.status);
-    if (!empty) {
+    if (!empty && q.type === 'file-upload') {
+      const [head, ...rest] = String(v).split('\n');
+      const m = head.match(/^\[(.+) \| (.+) \| (.+)\]$/);
+      check(!!m && isDeepStrictEqual(a.value, { name: m[1], mime: m[2], size: m[3], dataUrlLength: rest.join('\n').length }),
+        `"${q.id}": file upload round-trips (name, type, size, full data URL)`, JSON.stringify(a.value));
+    } else if (!empty) {
       const got = Array.isArray(a.value) ? a.value : a.value;
       check(isDeepStrictEqual(got, Array.isArray(v) ? v.map(String) : (typeof v === 'number' ? v : String(v))),
         `"${q.id}": value equals the browser state`, `${JSON.stringify(got)} vs ${JSON.stringify(v)}`);
@@ -206,6 +213,9 @@ const shapes = {
   followed: Object.values(answers.answers).some((a) => a.followed === true),
   departed: Object.values(answers.answers).some((a) => a.followed === false),
   untouched: Object.values(answers.answers).some((a) => a.status === 'untouched'),
+  fileUpload: answers.answers.attach.status === 'answered',
+  answerEndingInNewline: String(answers.answers.essay.value).endsWith('\n'),
+  answerAfterFileUpload: answers.answers.skipme.status === 'skipped',
   critique: !!answers.critique,
 };
 for (const [k, v] of Object.entries(shapes)) check(v, `round trip covers: ${k}`);
@@ -241,6 +251,29 @@ git(project, 'add', '-A');
 const tracked = git(project, 'ls-files');
 check(!tracked.includes('.decisions'), 'a real `git add -A` stages nothing from .decisions/', tracked);
 check(tracked.includes('forms/round-trip.html'), 'control: the same `git add -A` did stage the form');
+
+// ── Rebuilding an answered form never overwrites its record ──
+r = node([join(SKILL_ROOT, 'tools', 'build.mjs'), SPEC, '--out', formPath]);
+const forms3 = (await readdir(join(store, 'forms'))).sort();
+const metaKept = JSON.parse(await readFile(join(store, 'forms', formId, 'meta.json'), 'utf8'));
+check(forms3.length === 2 && forms3.includes(`${formId}-2`), 'rebuilding an answered form to the same path makes a new form id', JSON.stringify(forms3));
+check(metaKept.status === 'answered' && !!metaKept.summary, 'the answered record survives the rebuild', metaKept.status);
+await rm(join(store, 'forms', `${formId}-2`), { recursive: true });
+
+// ── Same-day, same-name forms keep separate decisions files ──
+{
+  const other = join(project, 'other', 'round-trip.html');
+  r = node([join(SKILL_ROOT, 'tools', 'build.mjs'), SPEC, '--out', other]);
+  const otherId = (await readdir(join(store, 'forms'))).find((f) => f !== formId);
+  const otherExport = exportText.replace(`Form id: ${formId}`, `Form id: ${otherId}`);
+  await writeFile(join(work, 'other.txt'), otherExport);
+  r = node([join(SKILL_ROOT, 'tools', 'record.mjs'), join(work, 'other.txt')], { cwd: work });
+  const mds = (await readdir(decDir)).filter((f) => f.endsWith('.md'));
+  const firstMd = await readFile(join(decDir, decFiles[0]), 'utf8');
+  check(mds.length === 2 && firstMd.includes(`\`${formId}\``), 'a second same-name form answered the same day gets its own decisions file', JSON.stringify(mds));
+  await rm(join(store, 'forms', otherId), { recursive: true });
+  for (const f of mds) if (f !== decFiles[0]) await rm(join(decDir, f));
+}
 
 // ── Index ──
 const idx = (await readFile(join(store, 'index.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));

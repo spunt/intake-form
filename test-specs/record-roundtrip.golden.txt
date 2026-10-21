@@ -24,6 +24,7 @@ SL:             0   [UNTOUCHED DEFAULT — not confirmed by respondent]
 RANK:           Decisions > Store > Stats   [UNTOUCHED DEFAULT — not confirmed by respondent]
 TXT:            (not answered)
 ESSAY:          (not answered)
+ATTACH:         (no file)
 SKIPME:         (not answered)
 FLAGME:         (not answered)
 UNANS:          (not answered)

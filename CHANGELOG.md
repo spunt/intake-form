@@ -38,18 +38,23 @@ only 3 of the 6, in 3 different formats.
   `.decisions/` (don't re-ask what's settled), `record.mjs search` for past forms on
   the topic, `record.mjs stats` to keep confidence labels honest. After answers:
   record first, then act; point handoffs at `.decisions/`. Two new anti-patterns.
-- **`tools/record-test.mjs` (`npm run record`), 153 checks.** Builds a form, fills it
+- **`tools/record-test.mjs` (`npm run record`), 165 checks.** Builds a form, fills it
   in Chromium (Other with multi-line text, a label containing the ` | ` separator,
-  multi-paragraph notes, a skip with reason, a flag with a note, a branch, a
+  multi-paragraph notes, an answer ending in a newline, a file upload, a skip with reason, a flag with a note, a branch, a
   conditional, followed and departed recommendations, an untouched slider, a reordered
   rank, a decided-for-you list and a form critique), files it with one `record.mjs`
   command and asserts the parsed answers equal the in-browser state. Pastes with
   stripped trailing spaces or CRLF line endings must parse identically, as must a
-  pre-v1.4 export with unindented continuation lines. Verified by mutation: 14 defect
+  pre-v1.4 export with unindented continuation lines. Rebuilding an answered form to the
+  same path makes a new form instead of overwriting the answered record, and two
+  same-name forms answered the same day keep separate decisions files. Verified by
+  mutation: 16 defect
   shapes (among them a shortest-match label split, an off-by-two indent strip, a
   trimmed note, a lost marker, a missing form id or command, a non-self-ignoring
   `.decisions/`, the store missing from `.gitignore`, calibration that drops
-  departures) each fail the gate, then were reverted.
+  departures, a file upload's data URL left unread, a trailing newline ending the
+  answers) each fail the gate, then were reverted. An independent code review found
+  the last two and the two overwrite cases before release.
 - `test-specs/record-roundtrip.json` and its golden export (pins the form id line and
   the record footer).
 

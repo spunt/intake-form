@@ -214,6 +214,13 @@
           "label": "Anything else?"
         },
         {
+          "id": "attach",
+          "type": "file-upload",
+          "label": "Attach the old notes",
+          "accept": "text/plain",
+          "maxSizeKb": 64
+        },
+        {
           "id": "skipme",
           "type": "radio",
           "label": "Which records home?",

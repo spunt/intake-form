@@ -186,7 +186,7 @@ function readMarker(line) {
 // next non-empty line is indented (pasting can strip the indent's spaces).
 // Lenient mode is for exports from before v1.4.0, whose continuation lines were
 // not indented: an unknown column-0 line joins the entry above it.
-function readEntries(lines, start, width, isKnownKey, lenient = false, warnings = []) {
+function readEntries(lines, start, width, isKnownKey, lenient = false, warnings = [], isFileKey = () => false) {
   const entries = [];
   const keyOf = (l) => { const m = l.match(/^([^\s:][^:]*):(.*)$/); return m && isKnownKey(m[1]) ? m : null; };
   const absorbable = (l) => lenient && entries.length > 0 && l.trim() !== '' && !BLOCK_HEADER_RE.test(l.trim()) && !keyOf(l);
@@ -199,6 +199,12 @@ function readEntries(lines, start, width, isKnownKey, lenient = false, warnings 
       if (entries.length && j < lines.length && (lines[j].startsWith(' ') || absorbable(lines[j]))) {
         for (let k = i; k < j; k++) entries[entries.length - 1].lines.push('');
         i = j - 1;
+        continue;
+      }
+      // An answer that ends in a newline leaves one indent-only line before the
+      // next key; keep the newline and read on.
+      if (entries.length && j === i + 1 && j < lines.length && keyOf(lines[j])) {
+        entries[entries.length - 1].lines.push('');
         continue;
       }
       break;
@@ -215,7 +221,12 @@ function readEntries(lines, start, width, isKnownKey, lenient = false, warnings 
     }
     if (!m) break;
     const valueStart = Math.max(width, m[1].length + 1);
-    entries.push({ key: m[1], lines: [line.length > valueStart ? line.slice(valueStart) : m[2].replace(/^ +/, '')] });
+    const first = line.length > valueStart ? line.slice(valueStart) : m[2].replace(/^ +/, '');
+    entries.push({ key: m[1], lines: [first] });
+    // A file upload exports "[name | mime | size]" and then its data URL flush left.
+    if (isFileKey(m[1]) && /^\[.+ \| .+ \| .+\]$/.test(first) && i + 1 < lines.length) {
+      entries[entries.length - 1].lines.push(lines[++i]);
+    }
   }
   return { entries, next: i };
 }
@@ -284,7 +295,8 @@ export function parseExport(text, spec) {
       continue;
     }
     if (!sawAnswers) {
-      const { entries, next } = readEntries(lines, i, width, knownKey, !result.formId, warnings);
+      const isFileKey = (k) => index.has(k) && index.get(k).q.type === 'file-upload';
+      const { entries, next } = readEntries(lines, i, width, knownKey, !result.formId, warnings, isFileKey);
       if (entries.length) {
         sawAnswers = true;
         applyEntries(entries, spec, index, result);
