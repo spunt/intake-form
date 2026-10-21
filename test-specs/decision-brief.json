@@ -1,0 +1,116 @@
+{
+  "title": "Decision brief",
+  "heading": "Decide the release plan in one pass",
+  "subhead": "Why this form: three choices block the release, and each one changes what you will be asked to review next week. About 3 minutes. Each question says why it matters, what is at stake, and what I recommend, with how sure I am.",
+  "exportTitle": "DECISION BRIEF EXPORT",
+  "sections": [
+    {
+      "name": "Decisions",
+      "questions": [
+        {
+          "id": "release_gate",
+          "type": "radio",
+          "kind": "judgment",
+          "why": "This sets how often the release waits for you, so it decides how much of your week the release takes.",
+          "label": "When should a change go live without your yes?",
+          "hint": "Covers code changes only; docs always go live.",
+          "stakes": "Waiting for a yes cost about 30 minutes per change last month. Going ahead on green tests saves that, but a wrong change stays live until you read the summary.",
+          "recommendation": {
+            "value": "tests_pass",
+            "confidence": "high",
+            "because": "Every defect last month was caught by tests, and none by a yes.",
+            "risk": "A change that passes its tests and is still wrong stays live until the summary."
+          },
+          "options": [
+            { "value": "tests_pass", "label": "When its tests pass", "description": "You read a summary afterwards." },
+            { "value": "per_batch", "label": "After one yes per batch" },
+            { "value": "never", "label": "Never: I approve every change" }
+          ]
+        },
+        {
+          "id": "notify",
+          "type": "checkbox",
+          "why": "These are the moments you will be interrupted; everything else waits for the weekly summary.",
+          "label": "Which events should interrupt you?",
+          "recommendation": {
+            "value": ["failure", "cost"],
+            "confidence": "medium",
+            "because": "Both need a judgment only you can make; the rest can wait a week."
+          },
+          "options": [
+            { "value": "failure", "label": "A check fails twice" },
+            { "value": "cost", "label": "Spend passes the estimate" },
+            { "value": "merge", "label": "Every merge" }
+          ]
+        },
+        {
+          "id": "cadence",
+          "type": "segmented",
+          "why": "The cadence decides when you next hear from me without asking.",
+          "label": "How often should summaries arrive?",
+          "stakes": "Daily means five short reads a week; weekly means one longer read and slower course correction.",
+          "recommendation": {
+            "value": "weekly",
+            "confidence": "low",
+            "because": "You asked for fewer interruptions, but I have no data on how long a weekly read takes you."
+          },
+          "options": [
+            { "value": "daily", "label": "Daily" },
+            { "value": "weekly", "label": "Weekly" }
+          ]
+        },
+        {
+          "id": "decided_revisit",
+          "type": "checkbox",
+          "why": "I made these calls myself because each is easy to undo and I am confident in it; this is your chance to overrule any of them.",
+          "label": "I decided these without asking. Tick any you want me to revisit.",
+          "hint": "Unticked ones stand.",
+          "otherLabel": "Something else I decided",
+          "options": [
+            { "value": "docs_live", "label": "Docs changes go live without a yes" },
+            { "value": "branch_names", "label": "Release branches are named release/YYYY-MM-DD" }
+          ]
+        },
+        {
+          "id": "region",
+          "type": "radio",
+          "kind": "factual",
+          "other": false,
+          "label": "Which region hosts the service today?",
+          "recommendation": {
+            "value": "us",
+            "confidence": "medium",
+            "because": "The last three deploy logs name us-west.",
+            "risk": "A migration may have happened since."
+          },
+          "options": [
+            { "value": "us", "label": "United States", "badge": "Named in the last three deploy logs" },
+            { "value": "eu", "label": "European Union" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "In your words",
+      "questions": [
+        {
+          "id": "worries",
+          "type": "textarea",
+          "why": "Anything you write here goes straight into the release checklist.",
+          "label": "What worries you about this release?",
+          "placeholder": "As much detail as you like"
+        },
+        {
+          "id": "headline",
+          "type": "textarea",
+          "label": "Write the release headline.",
+          "maxLength": 80,
+          "maxLengthReason": "The changelog feed cuts headlines at 80 characters."
+        }
+      ]
+    }
+  ],
+  "knownContext": [
+    "Decided without asking (high confidence, easy to undo): docs changes go live without a yes; release branches are named release/YYYY-MM-DD. DECIDED_REVISIT lists any the respondent reopened."
+  ]
+}

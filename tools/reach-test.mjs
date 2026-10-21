@@ -20,6 +20,8 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadSpec, writeFormFile, specBasename, SKILL_ROOT } from './lib/build-form.mjs';
 
+const CSS_ESCAPE = (s) => s.replace(/["\\]/g, '\\$&');
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -45,6 +47,16 @@ function usage() {
     '  5. Display-only types are excluded from each section\'s answered/total count.',
     '  6. The global actions (critique, review) are present and visible at desktop',
     '     and mobile widths.',
+    '  7. Every why / stakes / recommendation in the spec is shown before the',
+    '     answer controls, at body size and color (not as a muted hint), and a',
+    '     recommendation states its confidence and reason.',
+    '  8. Every radio, checkbox and segmented question offers one "Other" choice',
+    '     with a text field (unless "other": false), and the typed text reaches',
+    '     the export. Choosing a recommended answer (radio, checkbox, segmented,',
+    '     and inside a branch) is marked as following it; ticking only part of a',
+    '     recommended checkbox set is marked as a departure.',
+    '  9. No open-answer textarea, commentary included, has a character limit',
+    '     unless the spec gives maxLengthReason, which the respondent can see.',
     '',
     'Default spec: examples/question-type-catalog.json (exercises every question type).'
   ].join('\n'));
@@ -81,12 +93,24 @@ const { spec } = await loadSpec(specPath);
 const tmpName = `reach-${specBasename(specPath)}`;
 const { path: formPath } = await writeFormFile(spec, { tmpName });
 
+const specQuestions = spec.sections.flatMap((s) => s.questions);
+const displayTypes = new Set(['narrative-card', 'embedded-media']);
+const OTHER_VALUE = '__other__';
+const otherEligible = (q) => ['radio', 'checkbox', 'segmented'].includes(q.type) &&
+  q.other !== false && !(spec.other === false && q.other !== true) &&
+  !(q.options || []).some((o) => o && (o.other === true || String(o.value).toLowerCase() === 'other'));
+
 const browser = await chromium.launch();
 const consoleErrors = [];
 let menuPresets = [];
 let toc = null;
 let actions = null;
 let mobileActions = null;
+const decisionFacts = new Map();
+const otherRuns = [];
+const followRuns = [];
+let recRun = null;
+let exportText = '';
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -149,6 +173,174 @@ try {
   await page.setViewportSize({ width: 375, height: 700 });
   await page.waitForTimeout(250);
   mobileActions = await readActions();
+
+  // 7–9 (v1.4.0). Walk every question through its TOC entry, so each fact is read
+  // from the step a respondent would actually see.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForTimeout(150);
+  const openQuestion = async (i) => {
+    await page.evaluate((k) => document.querySelectorAll('.toc-item')[k].click(), i);
+    await page.waitForTimeout(80);
+  };
+  for (let i = 0; i < specQuestions.length; i++) {
+    const q = specQuestions[i];
+    if (displayTypes.has(q.type)) continue;
+    await openQuestion(i);
+    decisionFacts.set(q.id, await page.evaluate((id) => {
+      const step = document.querySelector('.wizard-question.active');
+      const w = step && step.querySelector(`.question[data-layout="w"][data-question-id="${CSS.escape(id)}"]`);
+      if (!w) return { found: false };
+      const visible = (el) => {
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+      };
+      const follows = (a, b) => !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+      const textStyle = (el) => el ? { text: el.textContent, color: getComputedStyle(el).color, size: parseFloat(getComputedStyle(el).fontSize), visible: visible(el) } : null;
+      const label = w.querySelector(':scope > .question-label label');
+      const why = w.querySelector(':scope > .brief-why');
+      const brief = w.querySelector(':scope > .decision-brief');
+      const control = w.querySelector('.radio-group, .checkbox-group, .segmented-group, .scale-row, .priority-rank-list, .file-upload-zone, input[type="range"], textarea, input[type="text"]');
+      const own = (el) => el.closest('.question') === w;
+      return {
+        found: true,
+        label: textStyle(label),
+        why: why ? { ...textStyle(why.querySelector('p')), beforeLabel: label ? follows(why, label) : true } : null,
+        brief: brief ? {
+          visible: visible(brief),
+          beforeControl: control ? follows(brief, control) : true,
+          stakes: textStyle(brief.querySelector('.brief-stakes p')),
+          recOption: brief.querySelector('.recommendation-option')?.textContent ?? null,
+          chip: brief.querySelector('.confidence-chip')?.textContent ?? null,
+          because: brief.querySelector('.recommendation-because')?.textContent ?? null,
+        } : null,
+        badges: [...w.querySelectorAll('.choice-item')].filter(own).map((ci) => ({
+          value: ci.querySelector('input')?.value, badge: ci.querySelector('.badge-inferred')?.textContent ?? null,
+        })),
+        otherControl: [...w.querySelectorAll(`input[value="__other__"], .segmented-btn[data-value="__other__"]`)].filter(own).length,
+        otherField: [...w.querySelectorAll('.other-field textarea')].filter(own).length,
+        textareas: [...w.querySelectorAll('textarea')].filter(own).map((t) => ({
+          kind: t.classList.contains('commentary-input') ? 'commentary'
+            : t.classList.contains('other-input') ? 'other'
+            : t.closest('.conditional') ? 'conditional'
+            : t.dataset.qid === id ? 'answer' : 'flag note',
+          maxlength: t.getAttribute('maxlength'),
+        })),
+        limitReason: [...w.querySelectorAll('.char-limit-reason')].filter(own).map((e) => e.textContent),
+      };
+    }, q.id));
+  }
+
+  // The Other path, end to end: choose it, type, and find the text in the export.
+  for (const type of ['radio', 'checkbox', 'segmented']) {
+    const i = specQuestions.findIndex((q) => q.type === type && otherEligible(q));
+    if (i === -1) continue;
+    const q = specQuestions[i];
+    await openQuestion(i);
+    const sel = `.wizard-question.active .question[data-layout="w"][data-question-id="${q.id}"]`;
+    const otherSel = type === 'segmented'
+      ? `${sel} .segmented-btn[data-value="${OTHER_VALUE}"]`
+      : `${sel} > div > label.choice-item:has(input[value="${OTHER_VALUE}"]), ${sel} > div > div > label.choice-item:has(input[value="${OTHER_VALUE}"])`;
+    if (await page.locator(otherSel).count() === 0) {
+      otherRuns.push({ q, missing: true });
+      continue;
+    }
+    await page.locator(otherSel).first().click();
+    await page.waitForTimeout(60);
+    const field = `${sel} > .other-field textarea`;
+    const fieldVisible = await page.$eval(field, (t) => t.getBoundingClientRect().height > 0).catch(() => false);
+    const text = `reach-test answer for ${q.id}`;
+    // Eight lines, so a box that fails to grow when the other layout is shown is visibly clipped.
+    if (fieldVisible) await page.fill(field, text + '\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8');
+    otherRuns.push({ q, fieldVisible, text });
+  }
+
+  // The recommendation marker: follow one recommendation and check the export says so.
+  const ri = specQuestions.findIndex((q) => q.type === 'radio' && q.recommendation &&
+    !otherRuns.some((r) => r.q.id === q.id));
+  if (ri !== -1) {
+    const q = specQuestions[ri];
+    await openQuestion(ri);
+    const sel = `.wizard-question.active .question[data-layout="w"][data-question-id="${q.id}"]`;
+    await page.click(`${sel} label.choice-item:has(input[value="${CSS_ESCAPE(String(q.recommendation.value))}"])`);
+    recRun = { q };
+  }
+
+  if (otherRuns.length || recRun) {
+    await page.click('#topbar-review-btn');
+    await page.waitForTimeout(150);
+    exportText = await page.$eval('#export-text', (el) => el.textContent);
+  }
+
+  // An answer typed in one layout must be fully visible in the other: the hidden
+  // copy used to be measured while display:none and collapse, clipping the text.
+  const hasToggle = await page.evaluate(() => {
+    const t = document.getElementById('layout-toggle');
+    return !!t && !t.hidden;
+  });
+  const typed = otherRuns.filter((r) => !r.missing && r.fieldVisible);
+  if (hasToggle && typed.length) {
+    await page.click('#btn-grouped');
+    await page.waitForTimeout(150);
+    for (const run of typed) {
+      run.grouped = await page.evaluate((id) => {
+        const t = document.getElementById('if-other-g-' + id);
+        return t ? { client: t.clientHeight, scroll: t.scrollHeight } : null;
+      }, run.q.id);
+    }
+    await page.click('#btn-wizard');
+    await page.waitForTimeout(150);
+  }
+
+  // Follow each recommendation on the Other-run questions (checkbox: first a strict
+  // subset, which must still read as a departure), and one recommendation inside a
+  // branch follow-up. Each must be marked "[= recommended" in a fresh export.
+  const exportNow = async () => {
+    await page.click('#topbar-review-btn');
+    await page.waitForTimeout(150);
+    return page.$eval('#export-text', (el) => el.textContent);
+  };
+  const choose = async (scope, type, value) => {
+    const v = CSS_ESCAPE(String(value));
+    if (type === 'segmented') await page.locator(`${scope} .segmented-btn[data-value="${v}"]`).first().click();
+    else await page.locator(`${scope} label.choice-item:has(input[value="${v}"])`).first().click();
+    await page.waitForTimeout(40);
+  };
+  for (const run of otherRuns.filter((r) => !r.missing && r.q.recommendation)) {
+    const q = run.q;
+    const i = specQuestions.indexOf(q);
+    const sel = `.wizard-question.active .question[data-layout="w"][data-question-id="${q.id}"]`;
+    const recVals = [].concat(q.recommendation.value).map(String);
+    await openQuestion(i);
+    if (q.type === 'checkbox') {
+      await choose(sel, q.type, OTHER_VALUE);
+      await choose(sel, q.type, recVals[0]);
+      if (recVals.length > 1) {
+        followRuns.push({ q, key: q.exportKey || q.id, rec: q.recommendation, expect: 'subset', text: await exportNow() });
+        await openQuestion(i);
+        for (const v of recVals.slice(1)) await choose(sel, q.type, v);
+      }
+    } else {
+      await choose(sel, q.type, recVals[0]);
+    }
+    followRuns.push({ q, key: q.exportKey || q.id, rec: q.recommendation, expect: 'follow' });
+  }
+  const bi = specQuestions.findIndex((q) => q.type === 'radio' &&
+    (q.options || []).some((o) => o && o.branch && o.branch.recommendation));
+  if (bi !== -1) {
+    const q = specQuestions[bi];
+    const opt = q.options.find((o) => o && o.branch && o.branch.recommendation);
+    const sel = `.wizard-question.active .question[data-layout="w"][data-question-id="${q.id}"]`;
+    await openQuestion(bi);
+    await choose(sel, 'radio', opt.value);
+    const bsel = `${sel} .branch-conditional.visible`;
+    await choose(bsel, opt.branch.type, [].concat(opt.branch.recommendation.value)[0]);
+    followRuns.push({ q: opt.branch, key: opt.branch.exportKey || opt.branch.id, rec: opt.branch.recommendation, expect: 'follow' });
+  }
+  if (followRuns.some((f) => f.expect === 'follow')) {
+    const text = await exportNow();
+    followRuns.filter((f) => f.expect === 'follow').forEach((f) => { f.text = text; });
+  }
 } finally {
   await browser.close();
 }
@@ -170,8 +362,6 @@ for (const p of menuPresets) {
 }
 
 // 3 + 4 + 5: every question is reachable from the TOC, display-only types included.
-const specQuestions = spec.sections.flatMap((s) => s.questions);
-const displayTypes = new Set(['narrative-card', 'embedded-media']);
 const expectedDisplay = specQuestions.filter((q) => displayTypes.has(q.type));
 const expectedInputs = specQuestions.filter((q) => !displayTypes.has(q.type));
 
@@ -216,6 +406,121 @@ check(mobileActions.critiqueName.length > 2 && mobileActions.reviewName.length >
 
 check(consoleErrors.length === 0, 'no console or page errors',
   consoleErrors.slice(0, 3).join(' | '));
+
+// 7: decision context is shown before the decision, at body size and color. A
+// why rendered after the options, or styled like a muted hint, is the "missing
+// why" failure in a different form.
+const CONFIDENCE = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' };
+const bodyText = (t, label) => !!t && !!label && t.visible && t.color === label.color && t.size >= 12;
+for (const q of expectedInputs) {
+  const f = decisionFacts.get(q.id);
+  check(!!f && f.found, `"${q.id}" opens from its TOC entry`);
+  if (!f || !f.found) continue;
+  if (q.why) {
+    check(!!f.why && f.why.visible, `"${q.id}": why is shown`);
+    check(!!f.why && f.why.beforeLabel, `"${q.id}": why comes before the question`, 'start with why');
+    check(bodyText(f.why, f.label), `"${q.id}": why is body text, not a muted hint`,
+      f.why ? `color ${f.why.color} vs label ${f.label?.color}; ${f.why.size}px` : 'missing');
+  } else {
+    check(!f.why, `"${q.id}": no why block when the spec has none`);
+  }
+  if (q.stakes || q.recommendation) {
+    check(!!f.brief && f.brief.visible, `"${q.id}": decision brief is shown`);
+    check(!!f.brief && f.brief.beforeControl, `"${q.id}": decision brief comes before the answer controls`);
+  }
+  if (q.stakes) {
+    check(bodyText(f.brief?.stakes, f.label), `"${q.id}": stakes is body text, not a muted hint`,
+      f.brief?.stakes ? `color ${f.brief.stakes.color} vs label ${f.label?.color}; ${f.brief.stakes.size}px` : 'missing');
+  }
+  if (q.recommendation) {
+    check(f.brief?.chip === CONFIDENCE[q.recommendation.confidence], `"${q.id}": recommendation states its confidence`,
+      `chip shows ${JSON.stringify(f.brief?.chip)}`);
+    check(!!f.brief?.because, `"${q.id}": recommendation states its reason`);
+    if (q.type !== 'segmented') {
+      for (const v of [].concat(q.recommendation.value).map(String)) {
+        const opt = f.badges.find((b) => b.value === v);
+        check(!!opt && !!opt.badge, `"${q.id}": recommended option "${v}" is badged`);
+      }
+    }
+  }
+}
+
+// 8: every closed question offers "Other" with a text field, unless opted out, and
+// the typed answer survives into the export.
+for (const q of expectedInputs) {
+  const f = decisionFacts.get(q.id);
+  if (!f || !f.found || !['radio', 'checkbox', 'segmented'].includes(q.type)) continue;
+  const want = otherEligible(q);
+  check(f.otherControl === (want ? 1 : 0), `"${q.id}": ${want ? 'offers one' : 'offers no'} automatic Other choice`,
+    `found ${f.otherControl}`);
+  if (want) check(f.otherField === 1, `"${q.id}": Other has a text field`);
+}
+for (const run of otherRuns) {
+  const key = (run.q.exportKey || run.q.id).toUpperCase();
+  if (run.missing) {
+    check(false, `"${run.q.id}" (${run.q.type}): the Other choice can be selected`, 'no Other control rendered');
+    continue;
+  }
+  const line = exportText.split('\n').find((l) => l.startsWith(key + ':')) || '';
+  check(run.fieldVisible, `"${run.q.id}" (${run.q.type}): choosing Other reveals its text field`);
+  check(line.includes(`Other: ${run.text}`), `"${run.q.id}" (${run.q.type}): the Other text reaches the export`,
+    `export line: ${JSON.stringify(line)}`);
+  const exportLines = exportText.split('\n');
+  const after = exportLines[exportLines.indexOf(line) + 1] || '';
+  check(/^\s+line 2$/.test(after), `"${run.q.id}" (${run.q.type}): a multi-line answer stays indented under its key`,
+    `line after the key: ${JSON.stringify(after)}`);
+  if (run.grouped) {
+    check(run.grouped.scroll - run.grouped.client <= 2,
+      `"${run.q.id}" (${run.q.type}): an answer typed in one layout is not clipped in the other`,
+      `grouped box shows ${run.grouped.client}px of ${run.grouped.scroll}px`);
+  }
+  if (run.q.recommendation) {
+    check(line.includes('[≠ recommended'), `"${run.q.id}": an Other answer is marked as departing from the recommendation`,
+      `export line: ${JSON.stringify(line)}`);
+  }
+}
+if (recRun) {
+  const key = (recRun.q.exportKey || recRun.q.id).toUpperCase();
+  const line = exportText.split('\n').find((l) => l.startsWith(key + ':')) || '';
+  check(line.includes('[= recommended, ' + CONFIDENCE[recRun.q.recommendation.confidence].toLowerCase() + ']'),
+    `"${recRun.q.id}": following the recommendation is marked in the export`, `export line: ${JSON.stringify(line)}`);
+}
+for (const f of followRuns) {
+  const key = f.key.toUpperCase();
+  const line = (f.text || '').split('\n').find((l) => l.startsWith(key + ':')) || '';
+  if (f.expect === 'subset') {
+    check(line.includes('[≠ recommended'), `"${f.q.id}": ticking only part of the recommended set is marked as a departure`,
+      `export line: ${JSON.stringify(line)}`);
+  } else {
+    check(line.includes('[= recommended, ' + CONFIDENCE[f.rec.confidence].toLowerCase() + ']'),
+      `"${f.q.id}" (${f.q.type}): choosing the recommended answer is marked as following it`,
+      `export line: ${JSON.stringify(line)}`);
+  }
+}
+const recommendable = (q) => ['radio', 'checkbox', 'segmented'].includes(q.type) && q.recommendation;
+const specHasRecs = specQuestions.some((q) => recommendable(q) ||
+  (q.options || []).some((o) => o && o.branch && recommendable(o.branch)));
+const followedChecked = (recRun ? 1 : 0) + followRuns.filter((f) => f.expect === 'follow').length;
+check(!specHasRecs || followedChecked > 0, 'a followed recommendation is checked in the export',
+  'the spec has recommendations, but no run chose a recommended answer, so the "[= recommended" marker went untested');
+
+// 9: no open answer is capped unless the spec says why, and the respondent sees why.
+for (const q of expectedInputs) {
+  const f = decisionFacts.get(q.id);
+  if (!f || !f.found) continue;
+  for (const t of f.textareas) {
+    let expected = null;
+    if (t.kind === 'answer' && q.maxLength && q.maxLengthReason) expected = String(q.maxLength);
+    if (t.kind === 'conditional' && q.conditional?.maxLength && q.conditional?.maxLengthReason) {
+      expected = String(q.conditional.maxLength);
+    }
+    check(t.maxlength === expected, `"${q.id}": ${t.kind} textarea is ${expected ? 'limited to ' + expected : 'uncapped'}`,
+      `maxlength=${JSON.stringify(t.maxlength)}`);
+  }
+  if (q.type === 'textarea' && q.maxLength && q.maxLengthReason) {
+    check(f.limitReason.includes(q.maxLengthReason), `"${q.id}": the limit's reason is shown to the respondent`);
+  }
+}
 
 // ── Report ───────────────────────────────────────────────────────────────────
 const status = failures.length ? 'FAIL' : 'OK';

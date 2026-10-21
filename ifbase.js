@@ -337,9 +337,6 @@
       stepEl.id = 'q' + stepNum;
 
       stepEl.appendChild(buildSectionLabel(step.section.name));
-      if (step.question.inferenceBox) {
-        stepEl.appendChild(buildInferenceBox(step.question.inferenceBox));
-      }
       stepEl.appendChild(buildQuestion(step.question, 'w'));
       stepEl.appendChild(buildNavRow(!isFirst, true, false));
       wizard.appendChild(stepEl);
@@ -375,7 +372,6 @@
       secEl.appendChild(head);
 
       sec.questions.forEach(function (q) {
-        if (q.inferenceBox) secEl.appendChild(buildInferenceBox(q.inferenceBox));
         secEl.appendChild(buildQuestion(q, 'g'));
       });
       grouped.appendChild(secEl);
@@ -413,6 +409,10 @@
     wrap.dataset.layout = layoutPrefix;
 
     var isDisplay = q.type === 'narrative-card' || q.type === 'embedded-media';
+    // Start with why: the reader learns why the decision matters before being asked
+    // to make it, and before any mechanics.
+    if (q.why && !isDisplay) wrap.appendChild(buildWhy(q.why));
+    if (q.inferenceBox) wrap.appendChild(buildInferenceBox(q.inferenceBox));
     if (q.label && !isDisplay) {
       var lblWrap = document.createElement('div');
       lblWrap.className = 'question-label';
@@ -431,6 +431,10 @@
       hint.className = 'question-hint';
       hint.textContent = q.hint;
       wrap.appendChild(hint);
+    }
+
+    if (!isDisplay && (q.stakes || q.recommendation)) {
+      wrap.appendChild(buildDecisionBrief(q));
     }
 
     if (q.sources && !isDisplay) {
@@ -457,6 +461,10 @@
     }
     wrap.appendChild(body);
 
+    // Appended after the group (not inside it) so `.question > .radio-group`
+    // selectors, e.g. the skipped-state dimming, keep matching.
+    if (otherEnabled(q)) wrap.appendChild(buildOtherField(q, layoutPrefix));
+
     if (q.conditional) {
       var cond = document.createElement('div');
       cond.className = 'conditional';
@@ -466,7 +474,8 @@
         ? buildTextarea({
             id: q.conditional.stateKey || (q.id + '_other'),
             placeholder: q.conditional.placeholder,
-            maxLength: q.conditional.maxLength
+            maxLength: q.conditional.maxLength,
+            maxLengthReason: q.conditional.maxLengthReason
           }, layoutPrefix)
         : buildTextInput({
             id: q.conditional.stateKey || (q.id + '_other'),
@@ -514,7 +523,8 @@
     ta.className = 'commentary-input';
     ta.rows = 1;
     ta.placeholder = q.commentaryPlaceholder || (SPEC && SPEC.commentaryPlaceholder) || 'Add commentary (optional)';
-    ta.maxLength = q.commentaryMaxLength || (SPEC && SPEC.commentaryMaxLength) || 500;
+    // No character cap: commentary is the highest-signal field in the export, and
+    // a cap tells the respondent to say less exactly where saying more helps.
     ta.dataset.qid = ckey;
     ta.dataset.layout = layoutPrefix || '';
     ta.value = state[ckey] || '';
@@ -534,8 +544,17 @@
   }
 
   function autoGrow(ta) {
+    // A hidden copy (the other layout, or an inactive wizard step) has no layout box,
+    // so measuring it would collapse it to the minimum height and clip the answer.
+    // Skip it; regrowVisible() re-measures it once it is shown.
+    if (!ta.getClientRects().length) return;
     ta.style.height = 'auto';
     ta.style.height = (ta.scrollHeight ? ta.scrollHeight : 28) + 'px';
+  }
+
+  function regrowVisible(root) {
+    if (!root) return;
+    root.querySelectorAll('textarea.other-input, textarea.commentary-input').forEach(autoGrow);
   }
 
   // Factual questions get an explicit "Not sure" escape hatch, because a user can
@@ -544,11 +563,108 @@
   // there invites satisficing (Krosnick et al. 2002). Authors declare intent via
   // q.kind; the renderer applies the rule so nobody has to remember it.
   function resolveOptions(q) {
-    var opts = (q.options || []).slice();
+    var opts = withOther(q, (q.options || []).slice());
     if (q.kind !== 'factual') return opts;
     var hasEscape = opts.some(function (o) { return o.unsure; });
     if (!hasEscape) opts.push({ value: 'not_sure', label: 'Not sure', unsure: true });
     return opts;
+  }
+
+  // ── "Other — none of these fit" ──
+  // Every closed question gets a way out of its own options. Respondents
+  // repeatedly describe, in notes, answers the options never offered ("fix it in
+  // place before reverting"); a first-class Other turns those into answers instead
+  // of annotations on the nearest wrong box. Opt out with "other": false.
+  var OTHER_VALUE = '__other__';
+
+  function otherEnabled(q) {
+    if (q.type !== 'radio' && q.type !== 'checkbox' && q.type !== 'segmented') return false;
+    if (q.other === false) return false;
+    if (SPEC && SPEC.other === false && q.other !== true) return false;
+    // A spec that already offers its own "Other" keeps it, and gets no second one.
+    return !(q.options || []).some(function (o) {
+      return o && (o.other === true || String(o.value).toLowerCase() === 'other');
+    });
+  }
+
+  function withOther(q, opts) {
+    if (!otherEnabled(q)) return opts;
+    // Type-aware default: on a multi-select, "none of these fit" would contradict
+    // the options the respondent did tick; on a pill row, a long label wraps.
+    var fallback = q.type === 'checkbox' ? 'Something else'
+      : q.type === 'segmented' ? 'Other' : 'Other — none of these fit';
+    var other = {
+      value: OTHER_VALUE,
+      label: q.otherLabel || (SPEC && SPEC.otherLabel) || fallback,
+      isOther: true
+    };
+    // Substantive options, then Other, then any "Not sure" escape hatch.
+    var firstUnsure = -1;
+    opts.forEach(function (o, i) { if (firstUnsure === -1 && o.unsure) firstUnsure = i; });
+    if (firstUnsure === -1) opts.push(other); else opts.splice(firstUnsure, 0, other);
+    return opts;
+  }
+
+  function isOtherSelected(q) {
+    var v = state[q.id];
+    return Array.isArray(v) ? v.indexOf(OTHER_VALUE) !== -1 : v === OTHER_VALUE;
+  }
+
+  function otherAnswer(q) {
+    var text = (state[q.id + '__other'] || '').trim();
+    return text ? 'Other: ' + text : 'Other (no details given)';
+  }
+
+  function buildOtherField(q, layoutPrefix) {
+    var key = q.id + '__other';
+    var wrap = document.createElement('div');
+    wrap.className = 'other-field' + (isOtherSelected(q) ? ' visible' : '');
+    wrap.dataset.otherFor = q.id;
+    var ta = document.createElement('textarea');
+    ta.className = 'other-input';
+    ta.rows = 2;
+    ta.id = 'if-other-' + layoutPrefix + '-' + q.id;
+    ta.placeholder = q.type === 'checkbox' ? 'What else applies, and why?' : 'What would you choose instead, and why?';
+    ta.setAttribute('aria-label', 'Your own answer: ' + (q.label || q.id));
+    ta.dataset.qid = key;
+    ta.value = state[key] || '';
+    ta.addEventListener('input', function () {
+      state[key] = ta.value;
+      document.querySelectorAll('textarea[data-qid="' + key + '"]').forEach(function (t) {
+        if (t !== ta) { t.value = ta.value; autoGrow(t); }
+      });
+      autoGrow(ta);
+    });
+    wrap.appendChild(ta);
+    return wrap;
+  }
+
+  function syncOtherField(q) {
+    var show = isOtherSelected(q);
+    document.querySelectorAll('.other-field[data-other-for="' + q.id + '"]').forEach(function (el) {
+      el.classList.toggle('visible', show);
+      if (show) el.querySelectorAll('textarea').forEach(autoGrow);
+    });
+  }
+
+  // ── Recommendation ──
+  var CONFIDENCE_LABELS = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' };
+
+  function recommendedValues(q) {
+    var r = q.recommendation;
+    if (!r || r.value === undefined || r.value === null) return [];
+    return (Array.isArray(r.value) ? r.value : [r.value]).map(String);
+  }
+
+  function optionLabel(q, value) {
+    var o = (q.options || []).find(function (oo) { return String(oo.value) === String(value); });
+    return o ? o.label : String(value);
+  }
+
+  function recommendationBadge(q, opt) {
+    if (!q.recommendation || recommendedValues(q).indexOf(String(opt.value)) === -1) return null;
+    var c = CONFIDENCE_LABELS[q.recommendation.confidence];
+    return 'Recommended' + (c ? ' · ' + c.toLowerCase() : '');
   }
 
   function buildRadioGroup(q, layoutPrefix) {
@@ -590,6 +706,7 @@
             bc.classList.toggle('visible', bc.dataset.branchFor === q.id + '__' + input.value);
           });
         }
+        syncOtherField(q);
       });
       item.appendChild(input);
 
@@ -597,7 +714,7 @@
       dot.className = 'choice-dot';
       item.appendChild(dot);
 
-      item.appendChild(buildChoiceText(opt));
+      item.appendChild(buildChoiceText(opt, recommendationBadge(q, opt)));
       group.appendChild(item);
     });
 
@@ -621,7 +738,7 @@
   function buildCheckboxGroup(q, layoutPrefix) {
     var group = document.createElement('div');
     group.className = 'checkbox-group';
-    q.options.forEach(function (opt) {
+    withOther(q, (q.options || []).slice()).forEach(function (opt) {
       var item = document.createElement('label');
       item.className = 'choice-item' + (opt.unsure ? ' unsure' : '');
 
@@ -650,6 +767,7 @@
         }
         checkboxSets[q.id] = set;
         state[q.id] = Array.from(set);
+        syncOtherField(q);
       });
       item.appendChild(input);
 
@@ -657,13 +775,14 @@
       check.className = 'choice-check';
       item.appendChild(check);
 
-      item.appendChild(buildChoiceText(opt));
+      item.appendChild(buildChoiceText(opt, recommendationBadge(q, opt)));
       group.appendChild(item);
     });
     return group;
   }
 
-  function buildChoiceText(opt) {
+  // autoBadge (the recommendation badge) yields to a badge the author wrote.
+  function buildChoiceText(opt, autoBadge) {
     var text = document.createElement('div');
     text.className = 'choice-text';
     var strong = document.createElement('strong');
@@ -674,29 +793,42 @@
       span.textContent = opt.description;
       text.appendChild(span);
     }
-    if (opt.badge) {
+    var badgeText = opt.badge || autoBadge;
+    if (badgeText) {
       var badge = document.createElement('div');
       badge.className = 'badge-inferred';
-      badge.textContent = opt.badge;
+      badge.textContent = badgeText;
       text.appendChild(badge);
     }
     return text;
   }
 
+  // Open answers are uncapped. A spec may still impose a limit, but only together
+  // with maxLengthReason, which is shown to the respondent: an unexplained counter
+  // reads as "say less" and costs the detail the agent most needs.
   function buildTextarea(q, layoutPrefix) {
     var wrap = document.createElement('div');
     var ta = document.createElement('textarea');
-    if (q.maxLength) ta.maxLength = q.maxLength;
+    var limit = (q.maxLength && q.maxLengthReason) ? Number(q.maxLength) : 0;
+    if (limit) ta.maxLength = limit;
     ta.id = 'if-input-' + layoutPrefix + '-' + q.id;
     ta.placeholder = q.placeholder || '';
     ta.dataset.qid = q.id;
     ta.dataset.layout = layoutPrefix || '';
     ta.value = state[q.id] || '';
     var counter = null;
-    if (q.maxLength) {
+    var count = null;
+    if (limit) {
       counter = document.createElement('div');
       counter.className = 'char-counter';
-      counter.textContent = (ta.value.length) + ' / ' + q.maxLength;
+      var reason = document.createElement('span');
+      reason.className = 'char-limit-reason';
+      reason.textContent = q.maxLengthReason;
+      counter.appendChild(reason);
+      count = document.createElement('span');
+      count.className = 'char-count';
+      count.textContent = ta.value.length + ' / ' + limit;
+      counter.appendChild(count);
     }
     ta.addEventListener('input', function () {
       state[q.id] = ta.value;
@@ -706,8 +838,8 @@
       });
       if (counter) {
         var n = ta.value.length;
-        counter.textContent = n + ' / ' + q.maxLength;
-        counter.className = 'char-counter' + (n > q.maxLength * 0.85 ? ' near' : '');
+        count.textContent = n + ' / ' + limit;
+        counter.className = 'char-counter' + (n > limit * 0.85 ? ' near' : '');
       }
     });
     wrap.appendChild(ta);
@@ -1017,7 +1149,7 @@
 
   // ── Segmented ──
   function buildSegmented(q, layoutPrefix) {
-    var opts = q.options || [];
+    var opts = withOther(q, (q.options || []).slice());
     var grp = document.createElement('div');
     grp.className = 'segmented-group';
     grp.setAttribute('role', 'group');
@@ -1034,11 +1166,13 @@
       btn.setAttribute('aria-pressed', state[q.id] === opt.value ? 'true' : 'false');
       btn.addEventListener('click', function () {
         state[q.id] = opt.value;
+        clearSkip(q.id);
         document.querySelectorAll('.segmented-btn[data-qid="' + q.id + '"]').forEach(function (b) {
           var active = b.dataset.value === opt.value;
           b.classList.toggle('active', active);
           b.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+        syncOtherField(q);
       });
       grp.appendChild(btn);
     });
@@ -1636,6 +1770,7 @@
     var nxt = document.getElementById('q' + n);
     if (nxt) nxt.classList.add('active');
     currentQ = n;
+    regrowVisible(nxt);
     if (n === TOTAL_Q) {
       buildReview('wizard-review-content');
       buildExport('export-text');
@@ -1814,6 +1949,79 @@
     return box;
   }
 
+  function buildBriefLabel(text) {
+    var lab = document.createElement('span');
+    lab.className = 'brief-label';
+    lab.textContent = text;
+    return lab;
+  }
+
+  function buildWhy(text) {
+    var el = document.createElement('div');
+    el.className = 'brief-why';
+    el.appendChild(buildBriefLabel('Why it matters'));
+    var p = document.createElement('p');
+    p.textContent = text;
+    el.appendChild(p);
+    return el;
+  }
+
+  // What's at stake + the agent's recommendation, in one block between the question
+  // and its options. Rendered at body size and color, not as a muted hint: this is
+  // the context a reader needs in order to decide, not a footnote.
+  function buildDecisionBrief(q) {
+    var box = document.createElement('div');
+    box.className = 'decision-brief';
+    if (q.stakes) {
+      var s = document.createElement('div');
+      s.className = 'brief-row brief-stakes';
+      s.appendChild(buildBriefLabel("What's at stake"));
+      var sp = document.createElement('p');
+      sp.textContent = q.stakes;
+      s.appendChild(sp);
+      box.appendChild(s);
+    }
+    var r = q.recommendation;
+    if (r && typeof r === 'object') {
+      var row = document.createElement('div');
+      row.className = 'brief-row brief-recommendation';
+      row.appendChild(buildBriefLabel('Recommended'));
+      var head = document.createElement('p');
+      var recVals = recommendedValues(q);
+      if (recVals.length) {
+        var opt = document.createElement('strong');
+        opt.className = 'recommendation-option';
+        opt.textContent = recVals.map(function (v) { return optionLabel(q, v); }).join(', ');
+        head.appendChild(opt);
+      }
+      if (CONFIDENCE_LABELS[r.confidence]) {
+        var chip = document.createElement('span');
+        chip.className = 'confidence-chip';
+        chip.dataset.confidence = r.confidence;
+        chip.textContent = CONFIDENCE_LABELS[r.confidence];
+        head.appendChild(chip);
+      }
+      row.appendChild(head);
+      if (r.because) {
+        var because = document.createElement('p');
+        because.className = 'recommendation-because';
+        because.textContent = r.because;
+        row.appendChild(because);
+      }
+      if (r.risk) {
+        var risk = document.createElement('p');
+        risk.className = 'recommendation-risk';
+        var rl = document.createElement('strong');
+        rl.textContent = 'Risk: ';
+        risk.appendChild(rl);
+        risk.appendChild(document.createTextNode(r.risk));
+        row.appendChild(risk);
+      }
+      box.appendChild(row);
+    }
+    return box;
+  }
+
   function buildHr() {
     var hr = document.createElement('hr');
     hr.className = 'divider';
@@ -1910,6 +2118,10 @@
       var commKey = q.id + '_commentary';
       if (state[commKey] === undefined) state[commKey] = '';
     }
+    if (otherEnabled(q)) {
+      var otherKey = q.id + '__other';
+      if (state[otherKey] === undefined) state[otherKey] = '';
+    }
   }
 
   // ── Wizard navigation ──
@@ -1924,6 +2136,7 @@
       nxt.addEventListener('animationend', function () { nxt.classList.remove('fade-in'); }, { once: true });
     }
     currentQ = next;
+    regrowVisible(nxt);
     if (next === TOTAL_Q) {
       buildReview('wizard-review-content');
       buildExport('export-text');
@@ -1937,6 +2150,7 @@
   function setLayout(mode) {
     document.getElementById('layout-wizard').style.display = mode === 'wizard' ? 'block' : 'none';
     document.getElementById('layout-grouped').style.display = mode === 'grouped' ? 'block' : 'none';
+    regrowVisible(document.getElementById(mode === 'wizard' ? 'layout-wizard' : 'layout-grouped'));
     document.getElementById('btn-wizard').classList.toggle('active', mode === 'wizard');
     document.getElementById('btn-grouped').classList.toggle('active', mode === 'grouped');
     document.getElementById('progress-bar-wrap').style.display = mode === 'wizard' ? '' : 'none';
@@ -2038,8 +2252,22 @@
     lines.push('2. SKIPPED is information, not absence. It means the question missed —');
     lines.push('   do not re-ask it verbatim. Check the reason.');
     lines.push('3. FLAGGED questions were judged wrong by the respondent.');
+    var readNum = 4;
+    var hasRecommendations = SPEC.sections.some(function (sec) {
+      return sec.questions.some(function (q) {
+        return !!q.recommendation || (q.options || []).some(function (o) {
+          return o && o.branch && o.branch.recommendation;
+        });
+      });
+    });
+    if (hasRecommendations) {
+      lines.push(readNum++ + '. [= recommended] / [≠ recommended] compare an answer with the');
+      lines.push('   recommendation the form offered. A departure from a high-confidence');
+      lines.push('   recommendation means the recommender misjudged something: find out');
+      lines.push('   what before relying on its other assumptions.');
+    }
     if (hasCritique) {
-      lines.push('4. FORM_CRITIQUE is present. The respondent says this form asked the');
+      lines.push(readNum + '. FORM_CRITIQUE is present. The respondent says this form asked the');
       lines.push('   wrong things. Do NOT treat it as one more answer: REGENERATE the form');
       lines.push('   at the corrected altitude, or re-scope, before acting on anything below.');
     }
@@ -2054,7 +2282,7 @@
         }).join(' | '));
       }
       if (formCritique.note) {
-        lines.push(padRight('DETAIL:', keyWidth) + formCritique.note);
+        lines.push(padRight('DETAIL:', keyWidth) + indentLines(formCritique.note, keyWidth));
       }
       lines.push('');
     }
@@ -2074,24 +2302,24 @@
           lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true)
             + '   [UNTOUCHED DEFAULT — not confirmed by respondent]');
         } else {
-          lines.push(padRight(keyBase + ':', keyWidth) + displayValue(q, true));
+          lines.push(padRight(keyBase + ':', keyWidth) + answerText(q, keyWidth));
         }
         var commKey = q.id + '_commentary';
         if (shouldAddCommentary(q) && state[commKey]) {
-          lines.push(padRight(keyBase + '_NOTE:', keyWidth) + state[commKey]);
+          lines.push(padRight(keyBase + '_NOTE:', keyWidth) + indentLines(state[commKey], keyWidth));
         }
         if (flags[q.id]) {
           var fk = CRITIQUE_KINDS.find(function (c) { return c.value === flags[q.id].kind; });
           lines.push(padRight(keyBase + '_FLAG:', keyWidth)
             + (fk ? fk.label : 'flagged')
-            + (flags[q.id].note ? ' — ' + flags[q.id].note : ''));
+            + (flags[q.id].note ? ' — ' + indentLines(flags[q.id].note, keyWidth) : ''));
         }
         // Multi-branch: if selected option has a branch, emit it
         if (q.type === 'radio' && state[q.id]) {
           var branchOpt = (q.options || []).find(function (o) { return o.value === state[q.id] && o.branch; });
           if (branchOpt) {
             var bq = branchOpt.branch;
-            lines.push(padRight((bq.exportKey || bq.id).toUpperCase() + ':', keyWidth) + displayValue(bq, true));
+            lines.push(padRight((bq.exportKey || bq.id).toUpperCase() + ':', keyWidth) + answerText(bq, keyWidth));
           }
         }
       });
@@ -2119,6 +2347,7 @@
     var val = state[q.id];
     if (q.type === 'radio') {
       if (!val) return '(not answered)';
+      if (val === OTHER_VALUE) return otherAnswer(q);
       var opt = (q.options || []).find(function (o) { return o.value === val; });
       var base = opt ? opt.label : val;
       // Append conditional if "reveals" option is selected
@@ -2131,6 +2360,7 @@
     if (q.type === 'checkbox') {
       if (!Array.isArray(val) || !val.length) return '(none)';
       return val.map(function (v) {
+        if (v === OTHER_VALUE) return otherAnswer(q);
         var o = (q.options || []).find(function (oo) { return oo.value === v; });
         return o ? o.label : v;
       }).join(forExport ? ' | ' : ', ');
@@ -2147,6 +2377,7 @@
     }
     if (q.type === 'segmented') {
       if (!val) return '(not answered)';
+      if (val === OTHER_VALUE) return otherAnswer(q);
       var segOpt = (q.options || []).find(function (o) { return o.value === val; });
       return segOpt ? segOpt.label : val;
     }
@@ -2170,6 +2401,40 @@
   function padRight(s, n) {
     while (s.length < n) s += ' ';
     return s;
+  }
+
+  // Multi-line answers stay visibly attached to their key: continuation lines are
+  // indented to the value column, so a paragraph break in a note can't pass for a
+  // new entry.
+  function indentLines(text, width) {
+    return String(text).replace(/\n/g, '\n' + padRight('', width));
+  }
+
+  // An answer plus its recommendation marker. The marker goes on the key's own line,
+  // so it stays next to the key however many lines the answer runs to. File uploads
+  // keep their two-line "[name | type | size]" + data-URL format unchanged.
+  function answerText(q, width) {
+    var value = displayValue(q, true);
+    var marker = recommendationMarker(q);
+    if (q.type === 'file-upload') return value + marker;
+    var nl = value.indexOf('\n');
+    var withMarker = nl === -1 ? value + marker : value.slice(0, nl) + marker + value.slice(nl);
+    return indentLines(withMarker, width);
+  }
+
+  // Marks whether an answer followed the form's recommendation, so the consuming
+  // agent sees where the respondent departed from it without re-reading the spec.
+  function recommendationMarker(q) {
+    var recVals = recommendedValues(q);
+    if (!recVals.length) return '';
+    var v = state[q.id];
+    var chosen = Array.isArray(v) ? v.map(String) : (v === null || v === undefined || v === '' ? [] : [String(v)]);
+    if (!chosen.length) return '';
+    var conf = CONFIDENCE_LABELS[q.recommendation.confidence];
+    conf = conf ? conf.toLowerCase() : 'confidence not stated';
+    var same = chosen.length === recVals.length && chosen.every(function (c) { return recVals.indexOf(c) !== -1; });
+    if (same) return '   [= recommended, ' + conf + ']';
+    return '   [≠ recommended: ' + recVals.map(function (x) { return optionLabel(q, x); }).join(' | ') + ' (' + conf + ')]';
   }
 
   // ── Review row helper (XSS-safe; also exported) ──

@@ -46,7 +46,7 @@
 {
   "title": "Intake",
   "heading": "What are we building?",
-  "subhead": "Quick check-in to align before work starts.",
+  "subhead": "Why this form exists, what changes for the reader once it's answered, and how long it takes.",
   "exportTitle": "INTAKE EXPORT",
   "sections": [
     {
@@ -55,11 +55,14 @@
         {
           "id": "example",
           "type": "radio",
-          "kind": "factual",
-          "label": "Example question — replace this whole spec block.",
+          "kind": "judgment",
+          "why": "Why this decision matters to the reader. Replace this whole spec block.",
+          "label": "Example question?",
+          "stakes": "What changes for the reader under each answer.",
+          "recommendation": { "value": "yes", "confidence": "medium", "because": "Your reason, in the reader's terms. Never pre-select." },
           "required": true,
           "options": [
-            { "value": "yes", "label": "Yes", "badge": "Likely — state your reasoning here, do not pre-select" },
+            { "value": "yes", "label": "Yes" },
             { "value": "no", "label": "No" }
           ]
         }

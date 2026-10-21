@@ -119,6 +119,47 @@ const KNOWN_TYPES = new Set([
   'priority-rank', 'narrative-card', 'embedded-media', 'file-upload',
 ]);
 const OPTION_TYPES = new Set(['radio', 'checkbox', 'segmented']);
+const CONFIDENCE_LEVELS = new Set(['high', 'medium', 'low']);
+const RECOMMENDATION_KEYS = new Set(['value', 'confidence', 'because', 'risk']);
+const OTHER_VALUE = '__other__';
+
+function validateRecommendation(q, where, errors) {
+  const r = q.recommendation;
+  if (!OPTION_TYPES.has(q.type)) {
+    errors.push(`${where}: recommendation is supported on radio, checkbox and segmented questions, not "${q.type}"`);
+    return;
+  }
+  if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+    errors.push(`${where}: recommendation must be an object { value, confidence, because, risk? }`);
+    return;
+  }
+  for (const k of Object.keys(r)) {
+    if (!RECOMMENDATION_KEYS.has(k)) {
+      errors.push(`${where}: recommendation has unknown key "${k}" (allowed: ${[...RECOMMENDATION_KEYS].join(', ')})`);
+    }
+  }
+  const optionValues = (Array.isArray(q.options) ? q.options : []).map((o) => String(o && o.value));
+  if (r.value === undefined || r.value === null || (Array.isArray(r.value) && r.value.length === 0)) {
+    errors.push(`${where}: recommendation.value is required (the option value you recommend)`);
+  } else if (Array.isArray(r.value) && q.type !== 'checkbox') {
+    errors.push(`${where}: recommendation.value may be an array only on checkbox questions`);
+  } else {
+    for (const v of Array.isArray(r.value) ? r.value : [r.value]) {
+      if (!optionValues.includes(String(v))) {
+        errors.push(`${where}: recommendation.value ${JSON.stringify(v)} is not one of this question's option values`);
+      }
+    }
+  }
+  if (!CONFIDENCE_LEVELS.has(r.confidence)) {
+    errors.push(`${where}: recommendation.confidence must be "high", "medium" or "low", got ${JSON.stringify(r.confidence)}`);
+  }
+  if (typeof r.because !== 'string' || !r.because.trim()) {
+    errors.push(`${where}: recommendation.because is required: why you recommend it, in the reader's terms`);
+  }
+  if ('risk' in r && (typeof r.risk !== 'string' || !r.risk.trim())) {
+    errors.push(`${where}: recommendation.risk must be a non-empty string when present`);
+  }
+}
 
 // Walk every question in the spec, including branch sub-questions, yielding
 // { question, sectionName, viaBranch }. Order matches render order.
@@ -138,15 +179,26 @@ function* iterQuestions(spec) {
 }
 
 // Structural validator for the whole spec (theme aside). Mirrors validateTheme's
-// house style: collect messages, return { ok, errors }. Catches the silent
+// house style: collect messages, return { ok, errors, warnings }. Catches the silent
 // structural failures that otherwise only surface as a broken form in a browser.
+// Warnings never fail a build; they flag spec fields the renderer ignores.
 export function validateSpec(spec) {
   const errors = [];
+  const warnings = [];
   if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
-    return { ok: false, errors: ['spec must be an object'] };
+    return { ok: false, errors: ['spec must be an object'], warnings };
   }
   if (!Array.isArray(spec.sections) || spec.sections.length === 0) {
     errors.push('spec.sections must be a non-empty array');
+  }
+  if ('other' in spec && typeof spec.other !== 'boolean') {
+    errors.push(`spec.other must be true or false, got ${JSON.stringify(spec.other)}`);
+  }
+  if ('otherLabel' in spec && (typeof spec.otherLabel !== 'string' || !spec.otherLabel.trim())) {
+    errors.push('spec.otherLabel must be a non-empty string');
+  }
+  if ('commentaryMaxLength' in spec) {
+    warnings.push('spec.commentaryMaxLength is ignored: commentary has no character limit (since v1.4.0)');
   }
   const seenIds = new Map();
   for (const { question: q, viaBranch } of iterQuestions(spec)) {
@@ -195,8 +247,35 @@ export function validateSpec(spec) {
       q.options.some((o) => o && o.branch)) {
       errors.push(`${where}: nested branches are not supported`);
     }
+    for (const f of ['why', 'stakes']) {
+      if (f in q && (typeof q[f] !== 'string' || !q[f].trim())) {
+        errors.push(`${where}: ${f} must be a non-empty string`);
+      }
+    }
+    if ('recommendation' in q) validateRecommendation(q, where, errors);
+    if ('other' in q && typeof q.other !== 'boolean') {
+      errors.push(`${where}: other must be true or false, got ${JSON.stringify(q.other)}`);
+    }
+    if ('otherLabel' in q && (typeof q.otherLabel !== 'string' || !q.otherLabel.trim())) {
+      errors.push(`${where}: otherLabel must be a non-empty string`);
+    }
+    if (Array.isArray(q.options) && q.options.some((o) => o && o.value === OTHER_VALUE)) {
+      errors.push(`${where}: option value "${OTHER_VALUE}" is reserved for the automatic "Other" choice`);
+    }
+    if (q.maxLength != null && !q.maxLengthReason) {
+      warnings.push(`${where}: maxLength ${q.maxLength} is ignored without maxLengthReason; open answers have no limit unless the respondent is told why`);
+    }
+    if (q.conditional && q.conditional.maxLength != null && !q.conditional.maxLengthReason) {
+      warnings.push(`${where}: conditional.maxLength is ignored without conditional.maxLengthReason`);
+    }
+    if ('commentaryMaxLength' in q) {
+      warnings.push(`${where}: commentaryMaxLength is ignored: commentary has no character limit (since v1.4.0)`);
+    }
+    if (typeof q.inferenceBox === 'string' && /\brecommend/i.test(q.inferenceBox)) {
+      warnings.push(`${where}: inferenceBox reads like a recommendation; use the recommendation field ({ value, confidence, because }) so it renders as one`);
+    }
   }
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, warnings };
 }
 
 export async function loadSpec(specPath) {
@@ -219,7 +298,8 @@ export async function loadSpec(specPath) {
     err.specErrors = structural.errors;
     throw err;
   }
-  return { spec, path: abs };
+  for (const w of structural.warnings) console.warn(`[intake-form] warning: ${w}`);
+  return { spec, path: abs, warnings: structural.warnings };
 }
 
 // How ifbase.css/js are referenced in the built HTML:
@@ -237,7 +317,10 @@ export async function buildFormHtml(spec, opts = {}) {
   }
   const tpl = await readFile(TEMPLATE_PATH, 'utf8');
   const finalSpec = applyOverrides(spec, opts);
-  const json = JSON.stringify(finalSpec, null, 2);
+  // Escape "<" so spec text can never close the <script> block it sits in
+  // (e.g. a quoted "</script>" in a why or stakes string). JSON.parse reads
+  // \u003c back as "<", so the rendered text is unchanged.
+  const json = JSON.stringify(finalSpec, null, 2).replace(/</g, '\\u003c');
   let replaced = tpl.replace(SPEC_BLOCK_RE, (_, open, _body, close) => {
     return `${open}\n${json}\n${close}`;
   });

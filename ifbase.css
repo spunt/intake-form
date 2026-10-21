@@ -420,7 +420,8 @@ textarea, input[type="text"] {
 }
 textarea:focus, input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--if-color-accent-ring); }
 textarea { min-height: 64px; line-height: 1.5; }
-.char-counter { text-align: right; font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+.char-counter { display: flex; justify-content: space-between; gap: 12px; text-align: right; font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+.char-limit-reason { text-align: left; font-size: 11px; color: var(--text-muted); }
 .char-counter.near { color: var(--warning); }
 
 .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 4px; }
@@ -685,6 +686,19 @@ video.embedded-media-asset { width: 100%; max-height: 360px; }
 
 .inference-box { background: var(--info-bg); border: 1px solid var(--info-border); border-radius: var(--radius-sm); padding: 10px 13px; margin-bottom: 14px; font-size: 12px; color: var(--info-text); line-height: 1.55; }
 .inference-box strong { font-weight: 600; }
+
+/* Decision context: why it matters, what's at stake, the recommendation.
+   Body size and full text color on purpose: this is what the reader needs in
+   order to decide, so it must not read as a footnote. */
+.brief-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+.brief-why { margin-bottom: 12px; }
+.brief-why p, .brief-row p { font-size: 13px; line-height: 1.55; color: var(--text); }
+.brief-row p + p { margin-top: 4px; }
+.decision-brief { display: grid; gap: 10px; margin: 4px 0 12px; padding: 10px 13px; background: var(--if-color-surface-soft); border-left: 3px solid var(--accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.recommendation-option { font-weight: 600; margin-right: 8px; }
+.confidence-chip { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); background: var(--accent-muted2); border: 1px solid var(--if-color-accent-border); border-radius: 3px; padding: 2px 6px; line-height: 1.4; vertical-align: 1px; }
+.recommendation-risk strong { font-weight: 600; }
+.other-input { min-height: 56px; resize: none; overflow: hidden; }
 
 .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 

@@ -55,7 +55,7 @@ The template ships with **relative** references (`ifbase.css`, `ifbase.js`), whi
 **Fallback — hand-edit the template** (only if Node is unavailable):
 
 1. Read `template.html`.
-2. Replace the placeholder spec inside `<script id="form-spec" type="application/json">…</script>` with your real spec. Keep everything else byte-for-byte identical.
+2. Replace the placeholder spec inside `<script id="form-spec" type="application/json">…</script>` with your real spec. Keep everything else byte-for-byte identical. If any spec text contains `<`, write it as `\u003c`, so a quoted `</script>` can't end the block early (the CLI does this for you).
 3. The template references `ifbase.css`/`ifbase.js` relatively, so a hand-edited form is styled **only when saved beside the skill files**. To save it elsewhere, inline the two files by hand or use the CLI.
 4. Save to a sensible folder relative to the current working directory (see § Save path), and tell the user the full path.
 
@@ -81,8 +81,11 @@ Save relative to the **current working directory**, in a sensible folder (e.g. `
 |---|---|
 | Blocker | Ask in form |
 | High-value | Ask in form |
+| Decidable by you: high confidence and easy to undo | Decide it, then show it. List these calls as the options of one checkbox question, "I decided these without asking. Tick any you want me to revisit; unticked ones stand.", and repeat them in `knownContext` so the agent reading the export knows what was decided. (`knownContext` alone is export-only: the reader never sees it, so they could not object.) |
 | Assumable | Assume in `knownContext` with a stated default |
 | Deferrable | Note in routing as deferred |
+
+Ask only what needs the reader: their judgment, facts only they have, or calls that are hard to undo. Never decide your own authority: approvals, permissions, spending and deleting the reader's things stay questions, however confident you are. A short form of real decisions costs less attention than a long one of rubber stamps.
 
 ---
 
@@ -120,11 +123,13 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
 ```jsonc
 {
   "title":       "string — shown in tab/topbar",
-  "heading":     "string — main h1",
-  "subhead":     "string — paragraph under h1",
+  "heading":     "string — main h1; name the outcome the form gets the reader",
+  "subhead":     "string — why the form exists, what changes for the reader once it's answered, and how long it takes",
   "exportTitle": "string — header row in the copy-for-Claude block. Default 'INTAKE EXPORT'",
   "sources":     [ { "url": "https://…", "label": "…", "note": "…" } ],  // optional; form-level references
   "sourcesLabel": "string — heading above the sources list. Default 'Background material'",
+  "other":       true,             // optional; false removes the automatic "Other" choice form-wide
+  "otherLabel":  "string (optional) — form-wide label for the automatic Other choice",
 
   "theme": {
     "preset":   "default | editorial | terminal | kraft | studio",   // optional; default = 'default'
@@ -155,14 +160,24 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
         {
           "id":        "snake_case — used as state key and form field name",
           "type":      "radio | checkbox | text | textarea | scale",
+          "why":       "string (recommended) — why this decision matters to the reader; shown first, above the question",
           "label":     "string — the question",
-          "hint":      "string (optional) — sub-label",
+          "hint":      "string (optional) — scope or mechanics; rendered small and muted",
+          "stakes":    "string (recommended) — what changes for the reader depending on the answer",
+          "recommendation": {             // radio / checkbox / segmented; see § Writing the questions
+            "value":      "option_value", // an array of values on a checkbox
+            "confidence": "high | medium | low",
+            "because":    "string — required: why, in the reader's terms",
+            "risk":       "string (optional) — what goes wrong if the recommendation is wrong"
+          },
           "required":  true,              // advisory only — every question is skippable
           "kind":      "factual | judgment",  // radio: controls the auto "Not sure" option
+          "other":     false,             // optional; removes the automatic "Other" choice (radio/checkbox/segmented)
+          "otherLabel": "string (optional) — label for the automatic Other choice",
           "tocLabel":  "string (optional) — shorter label for the sidebar TOC",
           "sources":   [ { "url": "https://…", "label": "…", "note": "…" } ],  // optional; open in new tab
           "exportKey": "OPTIONAL_OVERRIDE — defaults to id.toUpperCase()",
-          "inferenceBox": "string (optional) — shown as 'What I'm seeing: …' above the question",
+          "inferenceBox": "string (optional) — what you observed, shown as 'What I'm seeing: …'. Not for recommendations",
 
           // For radio / checkbox:
           "options": [
@@ -170,7 +185,7 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
               "value":       "snake_case",
               "label":       "Visible label",
               "description": "string (optional) — sub-label under the option",
-              "badge":       "string (optional) — e.g. 'Likely match — reason'",
+              "badge":       "string (optional) — replaces the automatic 'Recommended' badge on this option",
               "selected":    true,        // IGNORED at runtime — see § No default selections
               "unsure":       true,        // dashed border + italics; the escape-hatch option
               "reveals":     true         // selecting this option reveals the conditional follow-up
@@ -179,7 +194,10 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
 
           // For text / textarea:
           "placeholder": "string",
-          "maxLength":   500,             // textarea only — adds a char counter
+          // No character limit by default. A limit is enforced only together with a
+          // reason the respondent sees; maxLength alone is ignored (build warning).
+          // "maxLength":       280,
+          // "maxLengthReason": "This becomes the post text, which is cut at 280 characters.",
           "default":     "string",        // optional initial value
 
           // For scale (5 points; nothing pre-selected):
@@ -273,13 +291,14 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
               { "value": "unsure", "label": "Not sure", "unsure": true }
             ] }
 
-          // Conditional follow-up (paired with options[].reveals):
+          // Conditional follow-up (paired with options[].reveals). For a plain
+          // "Other (specify)" you don't need this: the renderer adds Other itself.
           "conditional": {
             "id":          "weight_other",
             "type":        "text | textarea",
             "placeholder": "string",
-            "stateKey":    "weight_other",   // optional; defaults to '<id>_other'
-            "maxLength":   200               // textarea only
+            "stateKey":    "weight_other"    // optional; defaults to '<id>_other'
+            // maxLength + maxLengthReason work here as on a textarea
           }
         }
       ]
@@ -288,7 +307,8 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
 
   "knownContext": [
     "Free-form lines appended to the export under '--- Context already known ---'",
-    "Use this for things Claude already knows so the user doesn't have to re-state them"
+    "Use this for things Claude already knows so the user doesn't have to re-state them",
+    "Export-only: the reader never sees these lines, so nothing the reader must check belongs only here"
   ],
 
   "routing": {
@@ -297,7 +317,79 @@ Available presets: `default` (blue SaaS), `editorial` (serif, warm paper), `term
 }
 ```
 
-## Writing the questions
+## Writing the questions: start with why
+
+A form spends the reader's attention in order to save it. Each question earns its place by
+making three things clear *before* the options: why the decision matters to the reader,
+what changes for them depending on the answer, and what you recommend and how sure you
+are. A reader who can't tell why a question matters will skip it or guess, and either
+costs more than the round trip the form replaced.
+
+**Decide what you can first** (see § Gap triage). Ask only what needs the reader.
+
+**Each question, in reading order:**
+
+| Field | Says | Write it as |
+|---|---|---|
+| `why` | Why this decision matters to the reader: the goal it serves | One or two plain sentences about an outcome they care about, not the mechanism. No internal ids or file paths. |
+| `label` | The ask | One question, about 12 words or fewer. |
+| `hint` | Scope or mechanics, if needed | Optional; rendered small and muted, so put nothing here the reader needs in order to decide. |
+| `stakes` | What changes for the reader under each answer | Concrete: time, money, risk, attention, what they will see next. Contrast the options' consequences. |
+| `recommendation` | Your pick, how sure you are, and why | `{ value, confidence, because, risk? }`, below. |
+| `options` | The choices, in the reader's words | The renderer adds an "Other" choice with a text box. |
+
+The renderer shows `why` above the question and `stakes` and `recommendation` between the
+question and its options, at body size and color, because this is the context a reader
+needs in order to decide, not a footnote.
+
+**Context goes inline.** `sources` links are extras for readers who want depth, never the
+only explanation. If the reader must open a link to understand why a question matters, the
+question isn't ready. The same goes for the form: `heading` names the outcome, and
+`subhead` says why the form exists, what changes once it's answered, and how long it
+takes. Keep that first screen short.
+
+**Recommendations are structured, not prose:**
+
+```json
+"recommendation": {
+  "value": "tests_pass",
+  "confidence": "high",
+  "because": "Both edits that waited for a yes went in unchanged; tests caught every defect.",
+  "risk": "A change that passes its tests but is still wrong stays live until you read the summary."
+}
+```
+
+- `value` is an option value; on a checkbox, an array of values.
+- `confidence`: **high**, you measured it and would act without asking; **medium**, partial
+  evidence or a reasoned inference; **low**, a guess, and the reader's judgment is the point.
+- `because` (required) gives the reason in the reader's terms, citing what you measured.
+- `risk` (optional) says what goes wrong if you're wrong.
+
+The renderer badges the recommended option but never pre-selects it, and the export marks
+each answer `[= recommended …]` or `[≠ recommended: …]`. Don't write recommendations into
+`inferenceBox` (that's for what you observed) or into hand-written badges.
+
+**Before and after** — the same decision, rewritten:
+
+```jsonc
+// Before: mechanics first; the why and the stakes are buried in a recommendation paragraph.
+{ "id": "approve_code", "type": "radio", "kind": "judgment",
+  "label": "How should I get your approval for the build's code and its tests?",
+  "hint": "Covers code the build writes in scripts/ and tests/.",
+  "inferenceBox": "Recommend 'go ahead when tests pass' (high confidence). Measured: last session, two edits each waited over 30 minutes for a yes…",
+  "options": [ … ] }
+
+// After: why, the ask, what's at stake, then the recommendation.
+{ "id": "approve_code", "type": "radio", "kind": "judgment",
+  "why": "The tool you asked for is built in code. How often I stop for your yes decides how soon you can use it and how much of your attention it takes.",
+  "label": "When may code changes go live without your yes?",
+  "stakes": "Each yes so far cost about 30 minutes of waiting and changed nothing. Going ahead on passing tests saves that; a change that passes its tests and is still wrong stays live until you read the summary (one-commit undo).",
+  "recommendation": { "value": "tests_pass", "confidence": "high",
+    "because": "Both edits that waited went in unchanged; tests caught every defect so far." },
+  "options": [ … ] }
+```
+
+### Clarity rules
 
 Default to clarity-first prose. If a `doc-clarity` skill (or equivalent house writing
 standard) is available in the environment, apply it to all question text. The rules below
@@ -311,10 +403,10 @@ are the load-bearing subset, restated so this skill does not depend on that skil
    synonym makes the user wonder whether you mean something different.
 4. **Name the actor.** "Who approves the rollout?" beats "How is approval handled?"
 5. **No stacked hedges.** "It may possibly be worth considering whether…" is noise. Ask.
-6. **Label uncertainty in `inferenceBox`.** Distinguish what you *measured* from what you
-   *inferred* from what you *assumed*: "Your last three services used AWS" (measured)
-   reads differently from "You probably want AWS" (assumed) — and only the first lets the
-   user correct the actual error.
+6. **Label uncertainty.** In `inferenceBox` and `recommendation.because`, distinguish what
+   you *measured* from what you *inferred* from what you *assumed*: "Your last three
+   services used AWS" (measured) reads differently from "You probably want AWS" (assumed),
+   and only the first lets the user correct the actual error.
 7. **Expand an unavoidable term of art once, on first use.** Do not simplify away
    precision for a domain expert.
 
@@ -342,8 +434,10 @@ Surface your hypothesis where the user can *reject* it:
 { "id": "target", "type": "radio", "kind": "factual",
   "label": "Which deployment target?",
   "inferenceBox": "Your last three services deployed to AWS.",
+  "recommendation": { "value": "aws", "confidence": "medium",
+    "because": "Your last three services deployed there." },
   "options": [
-    { "value": "aws", "label": "AWS", "badge": "Likely — matches prior services" },
+    { "value": "aws", "label": "AWS" },
     { "value": "gcp", "label": "GCP" }
   ] }
 ```
@@ -377,6 +471,27 @@ Set `"kind"` on every radio:
 | `judgment` | no | Preferences and trade-offs — the user *has* a view, and an escape hatch invites them to duck it |
 
 Omitting `kind` adds nothing; supply your own `"unsure": true` option if you want one.
+
+### Every closed question offers "Other"
+
+Radio, checkbox and segmented questions get one more choice after yours: "Other — none of
+these fit" (radio), "Something else" (checkbox) or "Other" (segmented). Choosing it opens
+a text box, and the export reads `KEY: Other: <their words>`.
+
+Respondents repeatedly describe, in notes, answers the options never offered ("fix it in
+place before reverting", "gzip it, then delete"). A note on the nearest wrong box is
+weaker evidence than an answer in their own words, so the form offers that answer
+directly. Opt out per question or form-wide with `"other": false`, for example on a
+genuinely closed factual choice; rename it with `"otherLabel"`. A spec that already has
+an option with value `"other"` keeps its own and gets no second one.
+
+### No arbitrary length limits
+
+Open answers, commentary included, have no character limit. A counter tells the
+respondent to say less exactly where saying more helps the agent. A spec can still cap a
+textarea when something downstream truly needs it, but only by pairing `maxLength` with
+`maxLengthReason`, which the respondent sees beside the counter. `maxLength` alone, and
+the old `commentaryMaxLength`, are ignored with a build warning.
 
 Every question is skippable regardless, so no user is ever trapped.
 
@@ -483,14 +598,14 @@ cannot become a script vector. Override the heading with `sourcesLabel`.
 
 Worked example of every type in one spec: `examples/question-type-catalog.json` (rendered: `examples/question-type-catalog.html`).
 
-- **Radio:** never pre-select. State your best guess as a `"badge"` or in `inferenceBox` — as visible reasoning the user can reject, not as a checked box. Set `"kind": "factual"` and the renderer adds "Not sure" for you; set `"kind": "judgment"` and it does not (see § Escape hatches).
-- **Checkbox:** nothing is pre-checked. `"selected"` is ignored at runtime.
+- **Radio:** never pre-select. Put your best guess in `recommendation` (value, confidence, because): visible reasoning the user can reject, not a checked box. Set `"kind": "factual"` and the renderer adds "Not sure" for you; set `"kind": "judgment"` and it does not (see § Escape hatches). The renderer also adds "Other — none of these fit" with a text box (see § Every closed question offers "Other").
+- **Checkbox:** nothing is pre-checked. `"selected"` is ignored at runtime. The renderer adds "Something else" with a text box. A `recommendation.value` here is an array.
 - **Text:** single-line. Use for short identifiers / names / "something else" follow-ups.
-- **Textarea:** multi-line. Cap to 2 textareas per form — recognition over recall.
+- **Textarea:** multi-line, auto-growing, no character limit. When you can list the likely answers, prefer a closed question: recognizing an answer is easier than recalling one, and the automatic Other still catches the rest. Use a textarea when you can't. A limit needs `maxLength` plus `maxLengthReason` (see § No arbitrary length limits).
 - **Scale:** 5 points, nothing pre-selected. Prefer `"labels": [...]` — one label per point — over endpoint-only `anchors`: fully labeled scales measure more reliably. `anchors` still works for two-ended trade-offs. Implements the APG radio-group pattern (arrow keys move and select). Five is deliberate, though not because five measures better: reliability and validity plateau at about five categories, and 5- and 7-point scales produce equivalent rescaled means. Five is *not worse* and costs the respondent less — which is the whole argument. The known cost is midpoint pile-up, since some respondents want a half-step, so when you need to separate *degrees* of a middle position rather than direction, write the distinction into the five labels instead of adding points.
-- **File-upload:** drag-and-drop zone with click-to-browse fallback. `accept` filters by MIME type. `maxSizeKb` (default 2048) enforces a size cap with an inline error on violation. Export embeds a `[filename | mime | size]` header followed by the base64 data-URL. Review display shows filename and size only (no data-URL). Does not get auto-commentary.
-- **Segmented:** pill-button toggle for 2–5 mutually-exclusive options. Options are `{value, label}` — no description field. Nothing is pre-selected. Does not get auto-commentary (it's a fast-tap choice). Export format: selected label (same as radio).
-- **Slider (discouraged):** prefer `segmented` or a labeled `scale`. Drag interaction measurably raises item nonresponse, worst on mobile, and distorts the value distribution. An untouched slider exports with an `[UNTOUCHED DEFAULT]` marker because a range input cannot represent "unanswered". Single-handle range. `min`/`max`/`step` default to 0/100/1. `anchors` array is optional — each entry `{at, label}` marks a threshold; the nearest anchor is highlighted as the thumb moves. Export format: numeric value only. Review display: `"42 — Medium"` (nearest anchor appended when anchors defined). Does not get an auto-commentary box.
+- **File-upload:** drag-and-drop zone with click-to-browse fallback. `accept` filters by MIME type. `maxSizeKb` (default 2048) enforces a size cap with an inline error on violation. Export embeds a `[filename | mime | size]` header followed by the base64 data-URL. Review display shows filename and size only (no data-URL). Gets auto-commentary unless `"commentary": false`.
+- **Segmented:** pill-button toggle for 2–5 mutually-exclusive options, plus an automatic "Other" pill. Options are `{value, label}` — no description field. Nothing is pre-selected. Gets auto-commentary like radio. Export format: selected label (same as radio).
+- **Slider (discouraged):** prefer `segmented` or a labeled `scale`. Drag interaction measurably raises item nonresponse, worst on mobile, and distorts the value distribution. An untouched slider exports with an `[UNTOUCHED DEFAULT]` marker because a range input cannot represent "unanswered". Single-handle range. `min`/`max`/`step` default to 0/100/1. `anchors` array is optional — each entry `{at, label}` marks a threshold; the nearest anchor is highlighted as the thumb moves. Export format: numeric value only. Review display: `"42 — Medium"` (nearest anchor appended when anchors defined).
 - **Priority-rank:** renders a drag-reorderable list. Each `options` entry becomes one row with a grip handle and ↑/↓ buttons. Minimum 2 options required (a single-item list cannot be ranked). `default` sets the initial order as an array of values; omit to use the options array order. Keyboard: ArrowUp/Down on the ↑/↓ buttons also move the item. Export format: `Label 1 > Label 2 > Label 3` (ordered by rank). Commentary is attached by default (users often need to explain their ranking).
 - **Narrative-card:** non-input story beat rendered in the question flow. Has `title`, `body`, and optional `icon` (emoji). Does not appear in review or export. Use to frame sections, provide context, or add emotional punctuation between questions.
 - **Multi-branch:** add `"branch": {<question object>}` to any radio option. When that option is selected, the branch question appears below the radio group (any primitive type). Only one branch is visible at a time. Branch answer exports on its own line keyed by the branch's `id`. Backwards-compatible with existing `reveals`/`conditional` pattern. **Constraints:** radio-only (not checkbox); nested branches (a branch with its own `branch` options) are not supported; branch question `id` must be globally unique within the form.
@@ -498,14 +613,14 @@ Worked example of every type in one spec: `examples/question-type-catalog.json` 
 
 ## Commentary (automatic — usually no spec needed)
 
-Every closed-choice question (`radio`, `checkbox`, `scale`) gets an auto-attached free-text "Add commentary (optional)" textarea below it. It's there because picking an option is rarely the whole truth — users want to explain *why*, qualify the choice, or note context the choices don't capture.
+Every answerable question except `text` and `textarea` gets an auto-attached free-text "Add commentary (optional)" textarea below it. It's there because picking an option is rarely the whole truth — users want to explain *why*, qualify the choice, or note context the choices don't capture.
 
 - **Open-ended question types (`text`, `textarea`) do NOT get a commentary box** — they're already free-form.
 - The commentary textarea auto-grows as the user types and stays empty/unobtrusive when not used.
+- No character limit. (`commentaryMaxLength` is ignored since v1.4.0, with a build warning.)
 - Per-question opt-out: `"commentary": false`
 - Form-wide opt-out: `"commentary": false` at the spec root (individual questions can still opt back in with `"commentary": true`)
 - Override the placeholder: `"commentaryPlaceholder": "Why this choice?"` — per-question or at spec root for a default
-- Override the max length: `"commentaryMaxLength": 300` (default 500)
 
 In the export, commentary appears on its own line with a `_NOTE` suffix:
 
@@ -527,6 +642,9 @@ The renderer produces the export when the user clicks "Copy for Claude". It auto
 
 QUESTION_ID:     value (with conditional appended if reveals option chosen)
 MULTI_FIELD:     val1 | val2
+OTHER_PICKED:    Other: the respondent's own answer
+FOLLOWED:        Chosen label   [= recommended, high confidence]
+DEPARTED:        Chosen label   [≠ recommended: Recommended label (medium confidence)]
 
 --- Context already known ---
 …knownContext lines…
@@ -534,6 +652,10 @@ MULTI_FIELD:     val1 | val2
 --- Routing suggestion ---
 ask.reason_fork       -> route to a structured decision workflow with FORK_FACTOR as the primary axis
 ```
+
+When a spec has recommendations, the export's "How to read this" block adds a line: a
+departure from a high-confidence recommendation means the recommender misjudged
+something, so find out what before relying on its other assumptions.
 
 You don't need to write a custom `buildExport` — the renderer reads from the spec.
 
@@ -561,8 +683,13 @@ If you genuinely need custom export logic, override `window.buildExport(boxId)` 
 - **Writing a `buildReview`/`buildExport` function in the form.** The renderer has spec-driven defaults. Only override if you really need to.
 - **Saving to a hardcoded path from another project** — save relative to the invoking project's cwd.
 - **Free text as default** — recognition patterns first; free text is the fallback.
-- **Pre-selecting an answer** — `selected`/`default` on closed-choice types is ignored at runtime. Put your hypothesis in a `badge` or `inferenceBox`.
+- **Pre-selecting an answer** — `selected`/`default` on closed-choice types is ignored at runtime. Put your hypothesis in `recommendation`.
+- **A question without its why** — if the reader can't tell from the card alone why the decision matters to them, they will skip it or guess. Write `why` and `stakes`; a link is not a substitute.
+- **A recommendation in prose** — "Recommend X (high confidence)…" in `inferenceBox` reads as an observation and can't be checked. Use the `recommendation` field.
+- **Asking what you could decide** — a high-confidence, easy-to-undo call belongs in a "tick any you want me to revisit" list, not in its own question (see § Gap triage).
+- **Character limits without a reason** — `maxLength` alone is ignored; if a limit is real, say why in `maxLengthReason`.
 - **A blanket "Not sure" on every radio** — declare `kind` instead and let the renderer decide.
+- **Hand-adding an "Other (specify)" option** — the renderer adds one to every closed question.
 - **Padding the form with low-altitude questions** — see § Question altitude.
 - **Asking about assumable gaps** — assume with stated default in `knownContext` instead.
 - **Inlining CSS/JS or modifying the template HTML** — use the skill's files via absolute path.

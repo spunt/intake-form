@@ -3,6 +3,119 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] — 2026-10-21
+
+User-centered release. The theme: a question should tell the reader why it matters,
+what is at stake and what the agent recommends before it shows the options, and should
+never box in or cap the answer. Prompted by a real 15-decision form whose respondent
+answered every question and still found it "too in the weeds … not enough info on the
+'why' for me to know why I should even care about the decision in the first place",
+and whose notes repeatedly described answers the options never offered.
+
+### Added
+
+- **`why` and `stakes` on any question.** `why` (why the decision matters to the
+  reader) renders above the question; `stakes` (what changes for them depending on the
+  answer) renders between the question and its options. Both use body size and the
+  full text color, not the muted hint style, because they are what the reader needs
+  in order to decide.
+- **`recommendation: { value, confidence, because, risk? }`** on radio, checkbox and
+  segmented questions. Renders as a block with the recommended option, a
+  high/medium/low confidence label, the reason and the risk; badges the recommended
+  option (an author-written badge takes precedence); never pre-selects it. The export
+  marks each answered question `[= recommended, … confidence]` or
+  `[≠ recommended: … (… confidence)]`, and adds one "How to read this" line explaining
+  the marker. Both appear only when a spec uses `recommendation`, so existing exports
+  are unchanged.
+- **"Other" on every closed question.** Radio gets "Other — none of these fit",
+  checkbox "Something else", segmented "Other"; choosing it opens an uncapped text box,
+  and the export reads `KEY: Other: <text>`. Opt out with `"other": false` (per question
+  or form-wide); rename with `"otherLabel"`. A spec that already has an option with
+  value `"other"` keeps its own.
+- **Spec warnings.** `validateSpec` now returns `warnings` alongside `errors`, and
+  `loadSpec` prints them. Warnings never fail a build: an ignored `maxLength`, an
+  ignored `commentaryMaxLength`, and an `inferenceBox` that reads like a recommendation.
+  New errors catch a malformed `recommendation` (unknown keys, a value that is not an
+  option, missing `confidence` or `because`), empty `why`/`stakes`, a non-boolean
+  `other`, and the reserved option value `__other__`.
+- **Reachability gate, assertions 7–9.** `reach-test.mjs` now opens every question
+  from the TOC and asserts that why/stakes/recommendation render before the answer
+  controls at body size and color, that a recommendation shows its confidence and
+  reason and badges its option, that every closed question's Other choice reveals a
+  text box whose text reaches the export, that choosing a recommended answer is marked
+  as following it (radio, checkbox, segmented, and inside a branch follow-up) while
+  ticking only part of a recommended set is marked as a departure, that a multi-line
+  answer typed in one layout is neither clipped in the other nor detached from its key
+  in the export, and that no textarea, commentary included, is capped without a stated
+  reason. A spec with recommendations now fails the gate if no run checked a followed
+  one, instead of skipping silently. Verified by mutation: nineteen defect shapes
+  (among them why after the label, why or stakes styled muted, Other missing or not
+  revealed or not exported, commentary capped, a limit honored without a reason,
+  confidence or badge or marker missing, a strict subset read as following, the brief
+  after the options, unescaped spec text) each fail the gate, then were reverted.
+- `test-specs/decision-brief.json`, `test-specs/hostile-text.json` and their golden
+  exports.
+
+### Changed
+
+- **No arbitrary character limits.** Commentary is uncapped (it defaulted to 500). A
+  textarea's `maxLength` is enforced only together with `maxLengthReason`, which is
+  shown beside the counter; `maxLength` alone is ignored. **Migration:** add
+  `maxLengthReason` to keep a limit. Forms already built with `--assets inline` embed
+  the old renderer and are unaffected.
+- **`inferenceBox` renders inside its question**, after `why` and before the label, in
+  both layouts. Branch questions now show their `inferenceBox` too.
+- **SKILL.md: "Start with why."** The question-writing section now leads with why /
+  label / stakes / recommendation in reading order, the recommendation contract and
+  what each confidence level means, inline context over links, and a before/after
+  example. Gap triage gains a "decide it yourself" row: a high-confidence, easy-to-undo
+  call goes in a "tick any you want me to revisit" list, not in its own question, and
+  an agent never decides its own authority (approvals, spending, deletion). New
+  anti-patterns cover a question without its why, a recommendation written as prose,
+  and unexplained limits. The `knownContext` docs now say it is export-only: the
+  reader never sees it.
+- The question-type catalog demonstrates `why`, `stakes`, `recommendation`,
+  `otherLabel` and `maxLengthReason`, and `template.html`'s placeholder spec (the
+  no-Node fallback) shows `why`, `stakes` and `recommendation` instead of a reasoning
+  badge. The template's HTML is unchanged.
+
+### Fixed
+
+- **Security: spec text can no longer close the `form-spec` script block.** The
+  builder inserted `JSON.stringify(spec)` raw, so any string containing `</script>`
+  ended the block early: the form failed to render and injected markup ran (verified:
+  a `why` quoting `</script><script>…</script>` executed under v1.3.1). The builder now
+  escapes `<` as `\u003c`, which `JSON.parse` reads back unchanged. Present since
+  v1.0.0; the new prose fields made it likelier to hit. The hand-edit fallback in
+  SKILL.md says to do the same.
+- **Multi-line answers stay attached to their key in the export.** Continuation lines
+  of a note, open answer or Other answer were flush left, so a paragraph break could
+  pass for a new entry; they are now indented to the value column. File uploads keep
+  their two-line format.
+- **Answers are no longer clipped after switching layouts.** Typing into a commentary
+  or Other box resized its hidden twin in the other layout while it was `display:none`,
+  collapsing it with no scrollbar; boxes are now measured when they become visible.
+- **The "Cap to 2 textareas per form" rule is actually gone.** v1.1.0 recorded its
+  removal, but the line survived under § Question type rules.
+- **Answering a skipped segmented question now clears the skip.** Its click handler
+  never called `clearSkip`, so the question stayed marked skipped after being answered.
+- **Docs:** segmented, slider and file-upload questions do get auto-commentary;
+  SKILL.md said they did not.
+
+### Known issue (pre-existing, unchanged)
+
+- Building the catalog with a forced `editorial`, `terminal` or `kraft` preset reports
+  axe contrast violations on scale point labels and source notes. Each test spec passes
+  in its own preset. Present in v1.3.1.
+
+### Compatibility
+
+Existing specs build and render without changes, with two visible differences: each
+radio, checkbox and segmented question gains an Other choice (`"other": false` removes
+it), and limits without a reason are dropped with a build warning. One export change:
+continuation lines of multi-line answers are now indented under their key. Untouched
+exports are byte-identical: all 12 existing golden exports are unchanged.
+
 ## [1.3.1] — 2026-09-22
 
 ### Added

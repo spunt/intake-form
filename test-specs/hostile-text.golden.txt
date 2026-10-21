@@ -1,0 +1,17 @@
+=== HOSTILE TEXT EXPORT ===
+
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+4. [= recommended] / [≠ recommended] compare an answer with the
+   recommendation the form offered. A departure from a high-confidence
+   recommendation means the recommender misjudged something: find out
+   what before relying on its other assumptions.
+
+QUOTED:         (not answered)
+
+--- Context already known ---
+Context line with </script> in it.

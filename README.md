@@ -19,6 +19,7 @@ It came out of agent workflows: before starting ambiguous work, an agent generat
 Anyone who wants a person's input captured **structured and unambiguous** before work begins — without standing up a survey tool, a database, or a login.
 
 - **Scoping agent work.** An agent hits 2+ real gaps, generates a form, and waits for a grounded brief instead of guessing.
+- **Batched decisions.** An agent has several calls only you can make. It decides what it confidently can, then puts the rest on one page, each with why it matters, what's at stake, and its recommendation with a confidence level.
 - **Lightweight requirements gathering.** Drop a form into any project folder, send the file, get a clean export back.
 - **Decision intake.** Capture the frame of a decision (reversibility, stakes, deciders, constraints) in one pass.
 
@@ -35,9 +36,15 @@ The reviewer clicks **Copy for Claude** and the renderer auto-formats every answ
 2. SKIPPED is information, not absence. It means the question missed —
    do not re-ask it verbatim. Check the reason.
 3. FLAGGED questions were judged wrong by the respondent.
+4. [= recommended] / [≠ recommended] compare an answer with the
+   recommendation the form offered. A departure from a high-confidence
+   recommendation means the recommender misjudged something: find out
+   what before relying on its other assumptions.
 
+APPROVAL:           When its tests pass   [= recommended, high confidence]
 REVERSIBILITY:      Easily reversible
 REVERSIBILITY_NOTE: reversible on paper, but the migration is one-way
+CLEANUP:            Other: gzip it with recovery steps, then delete   [≠ recommended: Delete it (medium confidence)]
 CONSTRAINTS:        Time | Compliance
 BUDGET:             SKIPPED (Doesn't apply)
 EFFORT:             30   [UNTOUCHED DEFAULT — not confirmed by respondent]
@@ -84,8 +91,10 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 ## How it works
 
 - **One spec, two views.** `ifbase.js` reads a single `<script id="form-spec">` block and builds *both* the wizard and the grouped layout from it, keeping state in sync. There is no second copy of the questions to drift out of sync — the structural fix for the classic "duplicate the DOM and one copy goes empty" bug.
-- **Native controls.** Real `<input>`/`<textarea>`/range elements, keyboard-navigable, with an inference box, a commentary field on every closed-choice question, and Skip + Flag controls on every question.
-- **Nothing is pre-selected.** A guess the user waves through would be indistinguishable from an answer they chose, so the agent's hypothesis appears as a visible badge to accept or reject — never as a checked box.
+- **Native controls.** Real `<input>`/`<textarea>`/range elements, keyboard-navigable, with an inference box, a commentary field on every answerable question except free text, and Skip + Flag controls on every question.
+- **Every question can start with why.** A question can say why it matters to the reader and what's at stake before showing its options, and carry the agent's recommendation with a confidence level and its reason. All of it renders at body size, not as a muted hint, so the reader can decide from the card alone.
+- **Room to answer.** Every closed question offers an "Other" choice with a text box, because the best answer is often one the options didn't list. Open answers and commentary have no character limit unless the spec gives a reason the reader can see.
+- **Nothing is pre-selected.** A guess the user waves through would be indistinguishable from an answer they chose, so the agent's recommendation appears as stated reasoning and a badge to accept or reject — never as a checked box. The export marks each answer as following or departing from it.
 - **The form can tell you it is wrong.** Any question can be skipped (with a reason) or flagged, and a form-level critique panel reachable from every question exports a `FORM_CRITIQUE` block telling the consuming agent to regenerate rather than proceed.
 - **Sidebar navigation.** A persistent table of contents lists every section and question with live status — answered, skipped, unanswered, flagged — and jumps to any of them.
 - **Cited material stays reachable.** Attach `sources` to the form or any question; they render as links that open in a new tab, so following a citation never discards the reviewer's answers.
@@ -98,11 +107,11 @@ The default `--assets inline` embeds `ifbase.css` and `ifbase.js`, so `my-form.h
 
 ## Quality
 
-The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), `axe-audit.mjs` (programmatic accessibility audit on both views), and `reach-test.mjs` (reachability gate: asserts every theme preset is actually selectable and every question — display-only types included — has a navigation entry). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
+The renderer is backed by tooling in [`tools/`](tools/): `build.mjs` (the authoring CLI, with `validateSpec` rejecting malformed specs before render and warning about ignored fields), `render-test.mjs` (headless Playwright render → screenshot + console-error capture + export capture against golden files in [`test-specs/`](test-specs/)), `axe-audit.mjs` (programmatic accessibility audit on both views), and `reach-test.mjs` (reachability gate: asserts every theme preset is actually selectable, every question — display-only types included — has a navigation entry, every why/stakes/recommendation is shown before its options at body size, every closed question's Other choice works end to end, and no answer box is capped without a stated reason). Every shipped question type and theme preset has a golden export captured under `test-specs/`.
 
 The reachability gate exists because render, golden, and axe checks all verify *rendering* and none verify *reachability* — twice a feature shipped complete in CSS, schema, docs, and goldens while remaining unselectable in the UI, passing every gate.
 
-Current state: 13/13 specs render with zero console errors, and zero axe violations across both layouts and all five theme presets. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
+Current state: 15/15 test specs render with zero console errors and zero axe violations across both layouts, each in its own theme preset. The design decisions behind v1.1.0 — no pre-selection, conditional escape hatches, labeled scales, position instead of percentage — rest on published survey-methodology and WAI-ARIA guidance, summarized per change in [`CHANGELOG.md`](CHANGELOG.md).
 
 ```bash
 cd tools && npm install

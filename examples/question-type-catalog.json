@@ -10,16 +10,23 @@
         {
           "id": "radio_demo",
           "type": "radio",
+          "why": "Your answer decides which version gets built first, so it sets what you can use next week.",
           "label": "Which option best describes your situation?",
-          "hint": "Pick the closest match — use commentary to qualify.",
+          "hint": "Pick the closest match — use commentary to qualify, or Other if none fits.",
+          "stakes": "Option A ships in days and is easy to undo; B and C take weeks and are harder to back out of.",
+          "recommendation": {
+            "value": "a",
+            "confidence": "medium",
+            "because": "It matches what you described last time and is the cheapest to reverse.",
+            "risk": "If your situation has changed since then, A solves last month's problem."
+          },
           "required": true,
           "inferenceBox": "This is an inferenceBox: what the AI already sees about your situation.",
           "options": [
             {
               "value": "a",
               "label": "Option A",
-              "description": "A clear first choice with a description.",
-              "badge": "Likely match — based on prior context"
+              "description": "A clear first choice with a description."
             },
             {
               "value": "b",
@@ -49,11 +56,18 @@
           "type": "checkbox",
           "label": "Which constraints apply? (select all that apply)",
           "hint": "Pick everything that genuinely applies.",
+          "otherLabel": "Another constraint",
+          "recommendation": {
+            "value": ["time", "compliance"],
+            "confidence": "low",
+            "because": "The brief mentions a launch date and a policy review; the rest is a guess."
+          },
           "options": [
             {
               "value": "time",
               "label": "Time",
-              "description": "There is an external deadline."
+              "description": "There is an external deadline.",
+              "badge": "Mentioned in the brief"
             },
             {
               "value": "money",
@@ -99,10 +113,11 @@
           "id": "textarea_demo",
           "type": "textarea",
           "label": "In one sentence, what is the actual question you need answered?",
-          "hint": "Multi-line. Auto-grows. Cap: 2 per form.",
+          "hint": "Multi-line and auto-growing. Open answers have no limit unless the spec gives a reason, as this one does.",
           "placeholder": "e.g., Should we adopt Postgres for the analytics path?",
           "required": true,
-          "maxLength": 240
+          "maxLength": 240,
+          "maxLengthReason": "This becomes the title of the tracking ticket, which is cut off after 240 characters."
         }
       ]
     },
@@ -160,8 +175,14 @@
         {
           "id": "segmented_demo",
           "type": "segmented",
+          "why": "Who decides sets how long this takes: a solo call is days, consensus can be weeks.",
           "label": "How will this decision be made?",
-          "hint": "Pill-button toggle. 2–5 mutually-exclusive options.",
+          "hint": "Pill-button toggle. 2–5 mutually-exclusive options, plus Other.",
+          "recommendation": {
+            "value": "consulted",
+            "confidence": "high",
+            "because": "Two teams depend on the result, but only you own the budget."
+          },
           "default": "consulted",
           "options": [
             {
@@ -282,6 +303,11 @@
                 "id": "dashboard_refresh",
                 "type": "segmented",
                 "label": "Refresh cadence",
+                "recommendation": {
+                  "value": "daily",
+                  "confidence": "medium",
+                  "because": "The source data lands once a day, so faster refreshes show nothing new."
+                },
                 "options": [
                   {
                     "value": "live",

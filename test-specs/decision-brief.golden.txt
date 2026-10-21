@@ -1,0 +1,23 @@
+=== DECISION BRIEF EXPORT ===
+
+--- How to read this ---
+1. Free-text NOTE lines carry more signal than the selections they
+   annotate. Where a note and a selection conflict, trust the note.
+2. SKIPPED is information, not absence. It means the question missed —
+   do not re-ask it verbatim. Check the reason.
+3. FLAGGED questions were judged wrong by the respondent.
+4. [= recommended] / [≠ recommended] compare an answer with the
+   recommendation the form offered. A departure from a high-confidence
+   recommendation means the recommender misjudged something: find out
+   what before relying on its other assumptions.
+
+RELEASE_GATE:         (not answered)
+NOTIFY:               (none)
+CADENCE:              (not answered)
+DECIDED_REVISIT:      (none)
+REGION:               (not answered)
+WORRIES:              (not answered)
+HEADLINE:             (not answered)
+
+--- Context already known ---
+Decided without asking (high confidence, easy to undo): docs changes go live without a yes; release branches are named release/YYYY-MM-DD. DECIDED_REVISIT lists any the respondent reopened.

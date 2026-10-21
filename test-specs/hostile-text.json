@@ -1,0 +1,34 @@
+{
+  "title": "Hostile text",
+  "heading": "Spec text that looks like markup </script><b>stays text</b>",
+  "subhead": "Regression fixture: every string below contains a closing script tag. The builder must escape it so the spec block stays intact and nothing executes.",
+  "exportTitle": "HOSTILE TEXT EXPORT",
+  "sections": [
+    {
+      "name": "Quoted markup",
+      "questions": [
+        {
+          "id": "quoted",
+          "type": "radio",
+          "kind": "judgment",
+          "why": "Quoted from a doc: </script><img src=x onerror=\"window.__pwned=1\">",
+          "label": "Does </script> render as text?",
+          "stakes": "If it doesn't, the form stops rendering and any injected handler runs: </script><script>window.__pwned=2</script>",
+          "recommendation": {
+            "value": "yes",
+            "confidence": "high",
+            "because": "The builder escapes < as \\u003c </script>",
+            "risk": "<!-- an unclosed comment"
+          },
+          "options": [
+            { "value": "yes", "label": "Yes </script>" },
+            { "value": "no", "label": "No <img src=x onerror=\"window.__pwned=3\">" }
+          ]
+        }
+      ]
+    }
+  ],
+  "knownContext": [
+    "Context line with </script> in it."
+  ]
+}
